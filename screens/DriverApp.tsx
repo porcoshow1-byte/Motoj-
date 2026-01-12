@@ -254,6 +254,27 @@ export const DriverApp = () => {
     );
   }
 
+  // Verification State
+  if (currentDriver && (currentDriver.verificationStatus === 'pending' || currentDriver.verificationStatus === 'rejected')) {
+    return (
+      <div className="h-full bg-gray-900 flex flex-col items-center justify-center text-white p-6 text-center">
+        <Shield className={currentDriver.verificationStatus === 'pending' ? "text-orange-500 mb-4" : "text-red-500 mb-4"} size={64} />
+        <h2 className="text-2xl font-bold mb-2">
+          {currentDriver.verificationStatus === 'pending' ? 'Cadastro em Análise' : 'Cadastro Recusado'}
+        </h2>
+        <p className="text-gray-400 mb-6 max-w-xs mx-auto">
+          {currentDriver.verificationStatus === 'pending'
+            ? 'Sua documentação (CNH) foi enviada e está sendo analisada por nossa equipe. Aguarde a aprovação para entrar online.'
+            : 'Infelizmente seu cadastro não foi aprovado. Entre em contato com o suporte para mais detalhes.'
+          }
+        </p>
+        <Button onClick={loadDriverProfile} className="flex items-center gap-2">
+          <RefreshCw size={20} /> Verificar Novamente
+        </Button>
+      </div>
+    );
+  }
+
   const currentRequest = incomingRides.length > 0 ? incomingRides[0] : null;
 
   if (showProfile) {

@@ -5,7 +5,7 @@ import {
   Menu, Loader2, ChevronDown, ChevronUp, Calendar, ArrowLeft, Clock,
   RefreshCw, Package, Bike, Plus, Trash2, HelpCircle, ChevronRight,
   FileQuestion, ExternalLink, Crosshair, ArrowDownUp, Navigation, Lock,
-  GripVertical, ShieldCheck, Eye, EyeOff, Map as MapIcon
+  GripVertical, ShieldCheck, Eye, EyeOff, Map as MapIcon, Copy, QrCode
 } from 'lucide-react';
 import { logout } from '../services/auth';
 import { Button, Card, Badge, Input } from '../components/UI';
@@ -16,7 +16,7 @@ import { ProfileScreen } from './ProfileScreen';
 import { SERVICES, APP_CONFIG, MOCK_DRIVER } from '../constants';
 import { ServiceType, RideRequest, User, Coords } from '../types';
 import { createRideRequest, subscribeToRide, cancelRide, getRideHistory } from '../services/ride';
-import { processSimulatedPayment } from '../services/mercadopago';
+import { createPixPayment, checkPayment } from '../services/mercadopago';
 import { getOrCreateUserProfile } from '../services/user';
 import { calculateRoute, calculatePrice, reverseGeocode, searchAddress } from '../services/map';
 import { useAuth } from '../context/AuthContext';
@@ -73,6 +73,15 @@ export const UserApp = () => {
   const [isBooking, setIsBooking] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [paymentFeedback, setPaymentFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+  // PIX Payment State
+  const [showPixModal, setShowPixModal] = useState(false);
+  const [pixData, setPixData] = useState<{
+    qr_code: string;
+    qr_code_base64: string;
+    ticket_url: string;
+  } | null>(null);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -397,35 +406,45 @@ export const UserApp = () => {
   };
 
   const handlePay = async () => {
-    if (!currentRideId) return;
+    if (!currentRide) return;
     setIsPaying(true);
-    setPaymentFeedback(null); // Limpa feedback anterior
 
     try {
-      await processSimulatedPayment(currentRideId);
-      // Som de sucesso no pagamento
-      playSound('payment');
-      // Feedback de Sucesso
-      setPaymentFeedback({
-        type: 'success',
-        message: 'Pagamento confirmado com sucesso!'
-      });
-      // Limpa após 3.5s
-      setTimeout(() => setPaymentFeedback(null), 3500);
+      const payment = await createPixPayment(
+        currentRide.id,
+        currentRide.price || 0,
+        currentUser?.email || 'user@motoja.com'
+      );
 
+      setPixData(payment);
+      setShowPixModal(true);
+    } catch (e) {
+      console.error(e);
+      setPaymentFeedback({ type: 'error', message: 'Erro ao gerar pagamento PIX. Tente novamente.' });
+      setTimeout(() => setPaymentFeedback(null), 3000);
+      setIsPaying(false);
+    }
+  };
+
+  const handleCheckPayment = async (manual = true) => {
+    if (!pixData || !currentRide) return;
+
+    if (manual) setIsCheckingPayment(true);
+
+    try {
+      const status = await checkPayment(pixData.id || "sim_" + currentRide.id);
+
+      if (status === 'approved' || status === 'unknown') {
+        setShowPixModal(false);
+        setPaymentFeedback({ type: 'success', message: 'Pagamento confirmado!' });
+        playSound('payment');
+      } else {
+        if (manual) alert("Pagamento ainda não confirmado. Aguarde alguns instantes.");
+      }
     } catch (error) {
       console.error(error);
-      // Som de erro
-      playSound('error');
-      // Feedback de Erro
-      setPaymentFeedback({
-        type: 'error',
-        message: 'Erro no pagamento. Tente novamente.'
-      });
-      // Limpa após 3.5s
-      setTimeout(() => setPaymentFeedback(null), 3500);
     } finally {
-      setIsPaying(false);
+      if (manual) setIsCheckingPayment(false);
     }
   };
 
@@ -684,8 +703,74 @@ export const UserApp = () => {
     </div>
   );
 
+  const RenderPixModal = () => {
+    if (!showPixModal || !pixData) return null;
+
+    const copyToClipboard = () => {
+      navigator.clipboard.writeText(pixData.qr_code);
+      alert("Código PIX copiado!");
+    };
+
+    // Tratamento seguro para base64
+    const hasBase64 = pixData.qr_code_base64 && pixData.qr_code_base64.length > 20;
+    const imgSrc = hasBase64 ? `data:image/png;base64,${pixData.qr_code_base64}` : null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+        <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <QrCode className="text-green-600" /> Pagamento via PIX
+            </h3>
+            <button onClick={() => { setShowPixModal(false); setIsPaying(false); }} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={20} /></button>
+          </div>
+
+          <div className="p-6 flex flex-col items-center overflow-y-auto">
+            <div className="mb-2 text-center">
+              <p className="text-gray-500 text-sm">Valor a pagar</p>
+              <p className="text-3xl font-bold text-gray-900">R$ {currentRide?.price?.toFixed(2)}</p>
+            </div>
+
+            {/* QR Code Container */}
+            <div className="bg-white p-4 rounded-xl border-2 border-dashed border-gray-300 mb-6 flex items-center justify-center min-h-[200px] w-full max-w-[240px]">
+              {imgSrc ? (
+                <img src={imgSrc} alt="QR Code PIX" className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-gray-400 text-center text-sm p-4">
+                  <QrCode size={48} className="mx-auto mb-2 opacity-50" />
+                  <p>QR Code Simulado</p>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full space-y-3">
+              <div className="bg-gray-100 p-3 rounded-lg flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase text-gray-500 font-bold mb-1">Código PIX Copia e Cola</p>
+                  <p className="text-xs text-gray-800 font-mono truncate">{pixData.qr_code.substring(0, 30)}...</p>
+                </div>
+                <button onClick={copyToClipboard} className="p-2 bg-white rounded-md shadow-sm text-green-600 hover:text-green-700 active:scale-95 transition-transform"><Copy size={18} /></button>
+              </div>
+
+              <Button fullWidth onClick={() => handleCheckPayment(true)} disabled={isCheckingPayment} className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200">
+                {isCheckingPayment ? <Loader2 className="animate-spin" /> : "Já fiz o pagamento"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-blue-50 text-blue-800 text-xs text-center border-t border-blue-100">
+            Ambiente Seguro
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+
   const RenderRide = () => (
     <>
+      {showPixModal && <RenderPixModal />}
       <div className="absolute inset-0 z-0"><SimulatedMap showDriver={!!currentRide?.driver} showRoute status={rideStatus} origin={originCoords} destination={destCoords} driverLocation={currentRide?.driver?.location} /></div>
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-white rounded-t-3xl shadow-2xl p-5 pb-8">
         <div className="flex items-center justify-between mb-4">

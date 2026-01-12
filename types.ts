@@ -32,6 +32,8 @@ export interface Driver {
   status: 'online' | 'offline' | 'busy';
   earningsToday: number;
   phone: string;
+  verificationStatus?: 'pending' | 'approved' | 'rejected';
+  cnhUrl?: string;
 }
 
 export interface RideRequest {
@@ -49,7 +51,7 @@ export interface RideRequest {
   passenger: User;
   driver?: Driver;
   createdAt: number;
-  
+
   // New fields for Delivery & Security
   securityCode?: string;
   deliveryDetails?: {

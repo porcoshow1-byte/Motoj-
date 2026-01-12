@@ -9,57 +9,58 @@ interface InitialUserData {
   phone?: string;
   vehicle?: string;
   plate?: string;
+  cnhUrl?: string;
 }
 
 export const getOrCreateUserProfile = async (
-  uid: string, 
-  email: string, 
+  uid: string,
+  email: string,
   role: 'user' | 'driver',
   initialData?: InitialUserData
 ): Promise<User | Driver> => {
-  
+
   // MOCK MODE: Fallback para localStorage se não houver DB
   if (isMockMode || !db) {
-      const storageKey = `motoja_user_${uid}`;
-      const stored = localStorage.getItem(storageKey);
-      
-      if (stored) {
-          const parsed = JSON.parse(stored);
-          // Atualiza dados se vierem no login e não existirem no mock antigo
-          if (role === 'driver' && initialData && (!parsed.vehicle || !parsed.plate)) {
-              const updated = { ...parsed, ...initialData };
-              localStorage.setItem(storageKey, JSON.stringify(updated));
-              return updated;
-          }
-          return parsed;
-      }
+    const storageKey = `motoja_user_${uid}`;
+    const stored = localStorage.getItem(storageKey);
 
-      const displayName = initialData?.name || email.split('@')[0];
-      const baseData = {
-        id: uid,
-        name: displayName,
-        email: email,
-        phone: initialData?.phone || '',
-        rating: 5.0,
-        avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
-        createdAt: Date.now(),
-        role: role
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Atualiza dados se vierem no login e não existirem no mock antigo
+      if (role === 'driver' && initialData && (!parsed.vehicle || !parsed.plate)) {
+        const updated = { ...parsed, ...initialData };
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      }
+      return parsed;
+    }
+
+    const displayName = initialData?.name || email.split('@')[0];
+    const baseData = {
+      id: uid,
+      name: displayName,
+      email: email,
+      phone: initialData?.phone || '',
+      rating: 5.0,
+      avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
+      createdAt: Date.now(),
+      role: role
+    };
+
+    let newProfile: any = baseData;
+    if (role === 'driver') {
+      newProfile = {
+        ...baseData,
+        vehicle: initialData?.vehicle || 'Moto Demo',
+        plate: initialData?.plate || 'DEMO-9999',
+        status: 'online', // Default to online in mock for ease
+        location: { lat: -23.1047, lng: -48.9213 },
+        earningsToday: 0
       };
+    }
 
-      let newProfile: any = baseData;
-      if (role === 'driver') {
-        newProfile = {
-          ...baseData,
-          vehicle: initialData?.vehicle || 'Moto Demo',
-          plate: initialData?.plate || 'DEMO-9999',
-          status: 'online', // Default to online in mock for ease
-          location: { lat: -23.1047, lng: -48.9213 },
-          earningsToday: 0
-        };
-      }
-
-      localStorage.setItem(storageKey, JSON.stringify(newProfile));
-      return newProfile;
+    localStorage.setItem(storageKey, JSON.stringify(newProfile));
+    return newProfile;
   }
 
   // FIREBASE MODE
@@ -68,18 +69,20 @@ export const getOrCreateUserProfile = async (
 
   if (userSnap.exists()) {
     const data = userSnap.data() as any;
-    
-    if (role === 'driver' && (!data.vehicle || !data.plate) && initialData) {
-        const updateData = {
-            role: 'driver',
-            vehicle: initialData.vehicle,
-            plate: initialData.plate,
-            status: data.status || 'offline',
-            location: data.location || { lat: 0, lng: 0 },
-            earningsToday: data.earningsToday || 0
-        };
-        await updateDoc(userRef, updateData);
-        return { ...data, ...updateData };
+
+    if (role === 'driver' && (!data.vehicle || !data.plate || !data.cnhUrl) && initialData) {
+      const updateData = {
+        role: 'driver',
+        vehicle: initialData.vehicle || data.vehicle,
+        plate: initialData.plate || data.plate,
+        status: data.status || 'offline',
+        location: data.location || { lat: 0, lng: 0 },
+        earningsToday: data.earningsToday || 0,
+        verificationStatus: data.verificationStatus || 'pending',
+        cnhUrl: initialData.cnhUrl || data.cnhUrl || ''
+      };
+      await updateDoc(userRef, updateData);
+      return { ...data, ...updateData };
     }
     return data as User | Driver;
   } else {
@@ -117,16 +120,16 @@ export const getOrCreateUserProfile = async (
 
 export const updateUserProfile = async (uid: string, data: Partial<User | Driver>) => {
   if (isMockMode || !db) {
-     const storageKey = `motoja_user_${uid}`;
-     const stored = localStorage.getItem(storageKey);
-     if (stored) {
-         const parsed = JSON.parse(stored);
-         const updated = { ...parsed, ...data };
-         localStorage.setItem(storageKey, JSON.stringify(updated));
-     }
-     return;
+    const storageKey = `motoja_user_${uid}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      const updated = { ...parsed, ...data };
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+    }
+    return;
   }
-  
+
   const userRef = doc(db, USERS_COLLECTION, uid);
   await updateDoc(userRef, data);
 };

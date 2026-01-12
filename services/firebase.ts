@@ -29,16 +29,23 @@ let auth: Auth | undefined;
 
 try {
   if (!isMockMode) {
-      app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-      db = getFirestore(app);
-      auth = getAuth(app);
-      console.log("Firebase conectado:", firebaseConfig.projectId);
+    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    db = getFirestore(app);
+    auth = getAuth(app);
+    console.log("Firebase conectado:", firebaseConfig.projectId);
   } else {
-      console.warn("⚠️ Firebase não configurado (Faltam variáveis de ambiente). O app rodará em modo MOCK/DEMO.");
+    console.warn("⚠️ Firebase não configurado (Faltam variáveis de ambiente). O app rodará em modo MOCK/DEMO.");
   }
 } catch (error: any) {
   console.error("ERRO CRÍTICO FIREBASE:", error);
   // Não relançamos o erro para permitir que o app carregue a UI
 }
 
-export { app, db, auth };
+// Inicializar Storage apenas se não estiver em modo mock (ou mockar se necessário)
+import { getStorage, FirebaseStorage } from 'firebase/storage';
+let storage: FirebaseStorage | undefined;
+if (app && !isMockMode) {
+  storage = getStorage(app);
+}
+
+export { app, db, auth, storage };

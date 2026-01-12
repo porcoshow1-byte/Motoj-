@@ -10,8 +10,16 @@ import { APP_CONFIG } from './constants';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const Main = () => {
-  const [currentRole, setCurrentRole] = useState<Role>('landing');
+  const [currentRole, setCurrentRole] = useState<Role>(() => {
+    const saved = localStorage.getItem('motoja_role');
+    return (saved as Role) || 'landing';
+  });
   const { user } = useAuth(); // Pega o usuário do contexto
+
+  // Persist role selection
+  React.useEffect(() => {
+    localStorage.setItem('motoja_role', currentRole);
+  }, [currentRole]);
 
   // 1. Landing Page (Estado Inicial)
   if (currentRole === 'landing') {
