@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Power, DollarSign, User, MessageSquare, Phone, History, Calendar, X, Settings, Loader2, AlertCircle, RefreshCw, Lock, ArrowRight, Navigation } from 'lucide-react';
+import { Shield, Power, DollarSign, User, MessageSquare, Phone, History, Calendar, X, Settings, Loader2, AlertCircle, RefreshCw, Lock, ArrowRight, Navigation, MapPin } from 'lucide-react';
 import { Button, Badge, Card, Input } from '../components/UI';
 import { SimulatedMap } from '../components/SimulatedMap';
 import { ChatModal } from '../components/ChatModal';
 import { ProfileScreen } from './ProfileScreen';
 import { APP_CONFIG } from '../constants';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToPendingRides, acceptRide, startRide, completeRide, getRideHistory, subscribeToRide } from '../services/ride';
+import { subscribeToPendingRides, acceptRide, startRide, completeRide, getRideHistory, subscribeToRide, updateDriverLocation } from '../services/ride';
 import { getOrCreateUserProfile } from '../services/user';
-import { RideRequest, Driver } from '../types';
+import { RideRequest, Driver, Coords } from '../types';
 import { playSound, initAudio } from '../services/audio';
+import { useGeoLocation } from '../hooks/useGeoLocation';
 
 export const DriverApp = () => {
   const { user: authUser } = useAuth();
@@ -36,6 +37,11 @@ export const DriverApp = () => {
 
   // Referência para rastrear contagem anterior de corridas (para tocar som)
   const prevIncomingCountRef = useRef(0);
+
+  // GPS em tempo real do motorista
+  const { location: driverGpsLocation } = useGeoLocation();
+  const [currentDriverLocation, setCurrentDriverLocation] = useState<Coords | null>(null);
+  const lastLocationUpdateRef = useRef<number>(0);
 
   const loadDriverProfile = async () => {
     if (!authUser) return;
@@ -106,6 +112,34 @@ export const DriverApp = () => {
       fetchHistory();
     }
   }, [showHistory, currentDriver]);
+
+  // Atualizar localização do motorista localmente quando GPS muda
+  useEffect(() => {
+    if (driverGpsLocation) {
+      setCurrentDriverLocation(driverGpsLocation);
+      // Atualiza também o driver local para mostrar no mapa
+      if (currentDriver) {
+        setCurrentDriver(prev => prev ? { ...prev, location: driverGpsLocation } : null);
+      }
+    }
+  }, [driverGpsLocation]);
+
+  // Enviar localização para o banco de dados durante corrida ativa
+  useEffect(() => {
+    if (!activeRide || !currentDriverLocation) return;
+
+    // Limitar updates para evitar sobrecarregar o banco (máx 1x a cada 3 segundos)
+    const now = Date.now();
+    if (now - lastLocationUpdateRef.current < 3000) return;
+
+    lastLocationUpdateRef.current = now;
+
+    // Enviar localização para o Firestore/Mock
+    updateDriverLocation(activeRide.id, currentDriverLocation).catch(err => {
+      console.warn("Erro ao enviar localização:", err);
+    });
+
+  }, [activeRide?.id, currentDriverLocation]);
 
   const toggleOnline = () => {
     if (!isOnline) {

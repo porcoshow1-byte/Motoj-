@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer } from '@react-google-maps/api';
 import { APP_CONFIG } from '../constants';
 import { Coords, Driver } from '../types';
@@ -39,7 +39,12 @@ const defaultCenter = {
 const InternalMap: React.FC<MapProps> = ({ showDriver, showRoute, status, origin, destination, driverLocation, drivers, waypoints }) => {
   const [map, setMap] = useState<any | null>(null);
   const [directionsResponse, setDirectionsResponse] = useState<any | null>(null);
-  
+
+  // Estado para animação suave do marcador do motorista
+  const [animatedDriverLocation, setAnimatedDriverLocation] = useState<Coords | null>(null);
+  const [driverRotation, setDriverRotation] = useState(0);
+  const prevDriverLocationRef = useRef<Coords | null>(null);
+
   const onLoad = useCallback((map: any) => {
     setMap(map);
   }, []);
@@ -52,10 +57,10 @@ const InternalMap: React.FC<MapProps> = ({ showDriver, showRoute, status, origin
   useEffect(() => {
     if (showRoute && origin && destination && window.google) {
       const directionsService = new window.google.maps.DirectionsService();
-      
+
       const formattedWaypoints = waypoints ? waypoints.map(p => ({
-          location: p,
-          stopover: true
+        location: p,
+        stopover: true
       })) : [];
 
       directionsService.route({
@@ -76,129 +81,185 @@ const InternalMap: React.FC<MapProps> = ({ showDriver, showRoute, status, origin
     }
   }, [showRoute, origin, destination, waypoints]);
 
+  // Animar movimento do motorista suavemente
+  useEffect(() => {
+    if (!driverLocation) {
+      setAnimatedDriverLocation(null);
+      return;
+    }
+
+    const prev = prevDriverLocationRef.current;
+
+    // Calcular rotação baseado na direção do movimento
+    if (prev && (prev.lat !== driverLocation.lat || prev.lng !== driverLocation.lng)) {
+      const deltaLat = driverLocation.lat - prev.lat;
+      const deltaLng = driverLocation.lng - prev.lng;
+      const angle = Math.atan2(deltaLng, deltaLat) * (180 / Math.PI);
+      setDriverRotation(angle);
+    }
+
+    // Animação suave com interpolação
+    if (prev && animatedDriverLocation) {
+      const startLat = animatedDriverLocation.lat;
+      const startLng = animatedDriverLocation.lng;
+      const endLat = driverLocation.lat;
+      const endLng = driverLocation.lng;
+
+      let startTime: number | null = null;
+      const duration = 1000; // 1 segundo de animação
+
+      const animate = (timestamp: number) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Easing suave (ease-in-out)
+        const easeProgress = progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        const currentLat = startLat + (endLat - startLat) * easeProgress;
+        const currentLng = startLng + (endLng - startLng) * easeProgress;
+
+        setAnimatedDriverLocation({ lat: currentLat, lng: currentLng });
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+
+      requestAnimationFrame(animate);
+    } else {
+      // Primeira vez, define direto
+      setAnimatedDriverLocation(driverLocation);
+    }
+
+    prevDriverLocationRef.current = driverLocation;
+  }, [driverLocation]);
+
   // Ajustar Zoom e Centralização
   useEffect(() => {
     if (!map) return;
 
     if (drivers && drivers.length > 0) {
-        // Modo Admin: Fit bounds para todos os motoristas
-        const bounds = new window.google.maps.LatLngBounds();
-        let hasValidLoc = false;
-        drivers.forEach(d => {
-            if (d.location && d.location.lat !== 0) {
-                bounds.extend(d.location);
-                hasValidLoc = true;
-            }
-        });
-        if (hasValidLoc) {
-            map.fitBounds(bounds);
-        } else {
-            map.panTo(defaultCenter);
-            map.setZoom(13);
+      // Modo Admin: Fit bounds para todos os motoristas
+      const bounds = new window.google.maps.LatLngBounds();
+      let hasValidLoc = false;
+      drivers.forEach(d => {
+        if (d.location && d.location.lat !== 0) {
+          bounds.extend(d.location);
+          hasValidLoc = true;
         }
+      });
+      if (hasValidLoc) {
+        map.fitBounds(bounds);
+      } else {
+        map.panTo(defaultCenter);
+        map.setZoom(13);
+      }
     } else if (origin && !destination && !showRoute) {
-        // Modo Acompanhar Usuário (Home)
-        map.panTo(origin);
-        map.setZoom(15);
+      // Modo Acompanhar Usuário (Home)
+      map.panTo(origin);
+      map.setZoom(15);
     }
   }, [map, origin, destination, showRoute, drivers]);
 
   return (
     <div className="relative w-full h-full animate-fade-in">
-        <GoogleMap
-          mapContainerStyle={mapContainerStyle}
-          center={origin || defaultCenter}
-          zoom={14}
-          onLoad={onLoad}
-          onUnmount={onUnmount}
-          options={{
-            disableDefaultUI: true,
-            zoomControl: false,
-            streetViewControl: false,
-            mapTypeControl: false,
-            fullscreenControl: false,
-            rotateControl: false,
-            clickableIcons: false,
-            styles: [
-                { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-            ]
-          }}
-        >
-          {/* User Marker (Origin) */}
-          {origin && !drivers && (
-              <Marker position={origin} icon={{
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  scale: 8,
-                  fillColor: "#f97316",
-                  fillOpacity: 1,
-                  strokeWeight: 2,
-                  strokeColor: "#ffffff",
-              }} />
-          )}
-
-          {/* Destination Marker */}
-          {destination && showRoute && (
-               <Marker position={destination} />
-          )}
-
-          {/* Single Driver Marker */}
-          {showDriver && driverLocation && !drivers && (
-              <Marker 
-                position={driverLocation}
-                icon={{
-                    path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: "#16a34a",
-                    fillOpacity: 1,
-                    strokeWeight: 1,
-                    strokeColor: "#ffffff",
-                    rotation: 0
-                }}
-              />
-          )}
-
-          {/* Multiple Drivers Markers (Admin) */}
-          {drivers && drivers.map(driver => (
-             driver.location && driver.location.lat !== 0 && (
-                <Marker
-                    key={driver.id}
-                    position={driver.location}
-                    title={`${driver.name} - ${driver.status}`}
-                    icon={{
-                        path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                        scale: 5,
-                        fillColor: driver.status === 'online' ? "#16a34a" : "#9ca3af",
-                        fillOpacity: 1,
-                        strokeWeight: 1,
-                        strokeColor: "#ffffff",
-                        rotation: Math.random() * 360
-                    }}
-                />
-             )
-          ))}
-
-          {/* Route Line */}
-          {directionsResponse && (
-            <DirectionsRenderer 
-                directions={directionsResponse} 
-                options={{
-                    suppressMarkers: true,
-                    polylineOptions: {
-                        strokeColor: "#f97316",
-                        strokeWeight: 5
-                    }
-                }}
-            />
-          )}
-        </GoogleMap>
-
-        {status && (
-            <div className="absolute top-12 left-4 right-4 z-30">
-                <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-sm border-l-4 border-orange-500 text-sm font-medium text-gray-800">
-                {status}
-                </div>
-            </div>
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={origin || defaultCenter}
+        zoom={14}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        options={{
+          disableDefaultUI: true,
+          zoomControl: false,
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          rotateControl: false,
+          clickableIcons: false,
+          styles: [
+            { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
+          ]
+        }}
+      >
+        {/* User Marker (Origin) */}
+        {origin && !drivers && (
+          <Marker position={origin} icon={{
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#f97316",
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+          }} />
         )}
+
+        {/* Destination Marker */}
+        {destination && showRoute && (
+          <Marker position={destination} />
+        )}
+
+        {/* Single Driver Marker - Com animação suave */}
+        {showDriver && animatedDriverLocation && !drivers && (
+          <Marker
+            position={animatedDriverLocation}
+            icon={{
+              path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+              scale: 6,
+              fillColor: "#16a34a",
+              fillOpacity: 1,
+              strokeWeight: 1,
+              strokeColor: "#ffffff",
+              rotation: driverRotation
+            }}
+          />
+        )}
+
+        {/* Multiple Drivers Markers (Admin) */}
+        {drivers && drivers.map(driver => (
+          driver.location && driver.location.lat !== 0 && (
+            <Marker
+              key={driver.id}
+              position={driver.location}
+              title={`${driver.name} - ${driver.status}`}
+              icon={{
+                path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                scale: 5,
+                fillColor: driver.status === 'online' ? "#16a34a" : "#9ca3af",
+                fillOpacity: 1,
+                strokeWeight: 1,
+                strokeColor: "#ffffff",
+                rotation: Math.random() * 360
+              }}
+            />
+          )
+        ))}
+
+        {/* Route Line */}
+        {directionsResponse && (
+          <DirectionsRenderer
+            directions={directionsResponse}
+            options={{
+              suppressMarkers: true,
+              polylineOptions: {
+                strokeColor: "#f97316",
+                strokeWeight: 5
+              }
+            }}
+          />
+        )}
+      </GoogleMap>
+
+      {status && (
+        <div className="absolute top-12 left-4 right-4 z-30">
+          <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-sm border-l-4 border-orange-500 text-sm font-medium text-gray-800">
+            {status}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
