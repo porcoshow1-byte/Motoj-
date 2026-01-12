@@ -3,6 +3,7 @@ import { X, Send, User } from 'lucide-react';
 import { subscribeToChat, sendMessage } from '../services/chat';
 import { ChatMessage } from '../types';
 import { Button } from './UI';
+import { playSound } from '../services/audio';
 
 interface ChatModalProps {
   rideId: string;
@@ -15,13 +16,22 @@ export const ChatModal = ({ rideId, currentUserId, otherUserName, onClose }: Cha
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
     const unsubscribe = subscribeToChat(rideId, (msgs) => {
+      // Tocar som se recebeu nova mensagem de outro usuário
+      if (msgs.length > prevMessageCountRef.current) {
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.senderId !== currentUserId) {
+          playSound('newMessage');
+        }
+      }
+      prevMessageCountRef.current = msgs.length;
       setMessages(msgs);
     });
     return () => unsubscribe();
-  }, [rideId]);
+  }, [rideId, currentUserId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,23 +67,22 @@ export const ChatModal = ({ rideId, currentUserId, otherUserName, onClose }: Cha
         <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-3">
           {messages.length === 0 && (
             <div className="text-center text-gray-400 mt-10 text-sm">
-              Nenhuma mensagem ainda.<br/>Diga olá! 👋
+              Nenhuma mensagem ainda.<br />Diga olá! 👋
             </div>
           )}
           {messages.map((msg) => {
             const isMe = msg.senderId === currentUserId;
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div 
-                  className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${
-                    isMe 
-                    ? 'bg-orange-500 text-white rounded-tr-none' 
-                    : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
-                  }`}
+                <div
+                  className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${isMe
+                      ? 'bg-orange-500 text-white rounded-tr-none'
+                      : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
+                    }`}
                 >
                   {msg.text}
                   <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-orange-100' : 'text-gray-400'}`}>
-                    {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
@@ -84,7 +93,7 @@ export const ChatModal = ({ rideId, currentUserId, otherUserName, onClose }: Cha
 
         {/* Input Area */}
         <div className="p-3 bg-white border-t border-gray-100">
-          <form 
+          <form
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             className="flex items-center gap-2"
           >
@@ -95,7 +104,7 @@ export const ChatModal = ({ rideId, currentUserId, otherUserName, onClose }: Cha
               placeholder="Digite sua mensagem..."
               className="flex-1 bg-gray-100 text-gray-800 rounded-full px-4 py-3 outline-none focus:ring-2 focus:ring-orange-500 transition"
             />
-            <button 
+            <button
               type="submit"
               disabled={!newMessage.trim()}
               className="p-3 bg-orange-500 text-white rounded-full hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/30 transition-all active:scale-95"
