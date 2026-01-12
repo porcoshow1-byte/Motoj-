@@ -1,0 +1,132 @@
+import { db, isMockMode } from './firebase';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { User, Driver } from '../types';
+
+export const USERS_COLLECTION = 'users';
+
+interface InitialUserData {
+  name?: string;
+  phone?: string;
+  vehicle?: string;
+  plate?: string;
+}
+
+export const getOrCreateUserProfile = async (
+  uid: string, 
+  email: string, 
+  role: 'user' | 'driver',
+  initialData?: InitialUserData
+): Promise<User | Driver> => {
+  
+  // MOCK MODE: Fallback para localStorage se não houver DB
+  if (isMockMode || !db) {
+      const storageKey = `motoja_user_${uid}`;
+      const stored = localStorage.getItem(storageKey);
+      
+      if (stored) {
+          const parsed = JSON.parse(stored);
+          // Atualiza dados se vierem no login e não existirem no mock antigo
+          if (role === 'driver' && initialData && (!parsed.vehicle || !parsed.plate)) {
+              const updated = { ...parsed, ...initialData };
+              localStorage.setItem(storageKey, JSON.stringify(updated));
+              return updated;
+          }
+          return parsed;
+      }
+
+      const displayName = initialData?.name || email.split('@')[0];
+      const baseData = {
+        id: uid,
+        name: displayName,
+        email: email,
+        phone: initialData?.phone || '',
+        rating: 5.0,
+        avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
+        createdAt: Date.now(),
+        role: role
+      };
+
+      let newProfile: any = baseData;
+      if (role === 'driver') {
+        newProfile = {
+          ...baseData,
+          vehicle: initialData?.vehicle || 'Moto Demo',
+          plate: initialData?.plate || 'DEMO-9999',
+          status: 'online', // Default to online in mock for ease
+          location: { lat: -23.1047, lng: -48.9213 },
+          earningsToday: 0
+        };
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(newProfile));
+      return newProfile;
+  }
+
+  // FIREBASE MODE
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const userSnap = await getDoc(userRef);
+
+  if (userSnap.exists()) {
+    const data = userSnap.data() as any;
+    
+    if (role === 'driver' && (!data.vehicle || !data.plate) && initialData) {
+        const updateData = {
+            role: 'driver',
+            vehicle: initialData.vehicle,
+            plate: initialData.plate,
+            status: data.status || 'offline',
+            location: data.location || { lat: 0, lng: 0 },
+            earningsToday: data.earningsToday || 0
+        };
+        await updateDoc(userRef, updateData);
+        return { ...data, ...updateData };
+    }
+    return data as User | Driver;
+  } else {
+    const displayName = initialData?.name || email.split('@')[0];
+    const displayPhone = initialData?.phone || '';
+
+    const baseData = {
+      id: uid,
+      name: displayName,
+      email: email,
+      phone: displayPhone,
+      rating: 5.0,
+      avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
+      createdAt: Date.now(),
+      role: role
+    };
+
+    let newProfile: any = baseData;
+
+    if (role === 'driver') {
+      newProfile = {
+        ...baseData,
+        vehicle: initialData?.vehicle || 'Veículo não cadastrado',
+        plate: initialData?.plate || 'AAA-0000',
+        status: 'offline',
+        location: { lat: 0, lng: 0 },
+        earningsToday: 0
+      };
+    }
+
+    await setDoc(userRef, newProfile);
+    return newProfile;
+  }
+};
+
+export const updateUserProfile = async (uid: string, data: Partial<User | Driver>) => {
+  if (isMockMode || !db) {
+     const storageKey = `motoja_user_${uid}`;
+     const stored = localStorage.getItem(storageKey);
+     if (stored) {
+         const parsed = JSON.parse(stored);
+         const updated = { ...parsed, ...data };
+         localStorage.setItem(storageKey, JSON.stringify(updated));
+     }
+     return;
+  }
+  
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await updateDoc(userRef, data);
+};
