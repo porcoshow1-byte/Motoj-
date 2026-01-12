@@ -751,6 +751,8 @@ export const AdminDashboard = () => {
           )}
         </div>
       </div>
+      {viewDriver && <DriverDetailModal driver={viewDriver} onClose={() => setViewDriver(null)} />}
+      {showAddDriver && <AddDriverModal onClose={() => setShowAddDriver(false)} />}
     </div>
   );
 
