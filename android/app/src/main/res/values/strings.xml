@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MotoJa</string>
+    <string name="title_activity_main">MotoJa</string>
+    <string name="package_name">com.motoja.app</string>
+    <string name="custom_url_scheme">com.motoja.app</string>
+</resources>
