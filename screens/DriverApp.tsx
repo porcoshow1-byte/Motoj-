@@ -11,6 +11,7 @@ import { getOrCreateUserProfile } from '../services/user';
 import { RideRequest, Driver, Coords } from '../types';
 import { playSound, initAudio } from '../services/audio';
 import { useGeoLocation } from '../hooks/useGeoLocation';
+import { showNotification, ensureNotificationPermission } from '../services/notifications';
 
 export const DriverApp = () => {
   const { user: authUser } = useAuth();
@@ -68,10 +69,18 @@ export const DriverApp = () => {
     let unsubscribe: any;
     if (isOnline && !activeRide) {
       unsubscribe = subscribeToPendingRides((rides) => {
-        // Tocar som se chegou nova corrida
+        // Tocar som e mostrar notificação se chegou nova corrida
         if (rides.length > 0 && prevIncomingCountRef.current === 0) {
           playSound('newRequest');
           setRequestAnimation('animate-slide-in-bottom');
+
+          // Mostrar notificação push se app não estiver em foco
+          const firstRide = rides[0];
+          showNotification('newRideRequest', {
+            price: firstRide.price,
+            origin: firstRide.origin,
+            destination: firstRide.destination
+          });
         }
         prevIncomingCountRef.current = rides.length;
         setIncomingRides(rides);
@@ -144,6 +153,7 @@ export const DriverApp = () => {
   const toggleOnline = () => {
     if (!isOnline) {
       initAudio(); // Inicializa áudio na primeira interação
+      ensureNotificationPermission(); // Solicita permissão de notificação
     }
     setIsOnline(!isOnline);
   };

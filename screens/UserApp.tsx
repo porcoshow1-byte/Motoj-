@@ -22,6 +22,7 @@ import { calculateRoute, calculatePrice, reverseGeocode, searchAddress } from '.
 import { useAuth } from '../context/AuthContext';
 import { useGeoLocation } from '../hooks/useGeoLocation';
 import { playSound, initAudio } from '../services/audio';
+import { showNotification, ensureNotificationPermission } from '../services/notifications';
 // Note: useJsApiLoader is handled internally by SimulatedMap component
 
 interface RoutePoint {
@@ -204,23 +205,29 @@ export const UserApp = () => {
 
         setCurrentRide(updatedRide);
 
-        // Tocar sons baseado na mudança de status
+        // Tocar sons e mostrar notificações baseado na mudança de status
         if (prevStatus !== newStatus) {
           if (newStatus === 'accepted' && prevStatus !== 'accepted') {
             playSound('rideAccepted');
+            showNotification('rideAccepted', {
+              driverName: updatedRide.driver?.name
+            });
             setStep('ride');
             setRideStatus('Seu piloto está a caminho!');
           } else if (newStatus === 'in_progress' && prevStatus !== 'in_progress') {
             playSound('rideStarted');
+            showNotification('rideStarted');
             setRideStatus('Em viagem para o destino');
           } else if (newStatus === 'completed') {
             playSound('rideCompleted');
+            showNotification('rideCompleted');
             setStep('rating');
             setCurrentRideId(null);
             setShowChat(false);
             setShowRideDetails(false);
           } else if (newStatus === 'cancelled') {
             playSound('error');
+            showNotification('rideCancelled');
             setStep('home');
             setCurrentRideId(null);
             setShowChat(false);
@@ -340,6 +347,9 @@ export const UserApp = () => {
       if (!contactName.trim()) return alert("Informe o nome do contato.");
       if (!contactPhone.trim()) return alert("Informe o telefone do contato.");
     }
+
+    // Solicitar permissão de notificação quando usuário faz primeira corrida
+    ensureNotificationPermission();
 
     setIsBooking(true);
     try {
