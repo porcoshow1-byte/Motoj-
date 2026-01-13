@@ -225,12 +225,40 @@ const InternalMap: React.FC<MapProps> = ({ showDriver, showRoute, status, origin
               key={driver.id}
               position={driver.location}
               title={`${driver.name} - ${driver.status}`}
+              onClick={() => {
+                if (map) {
+                  const infoWindow = new window.google.maps.InfoWindow({
+                    content: `
+                      <div style="padding: 8px; font-family: system-ui;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                          <img src="${driver.avatar || 'https://ui-avatars.com/api/?name=' + driver.name}" 
+                               style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;" />
+                          <div>
+                            <strong style="font-size: 14px;">${driver.name}</strong>
+                            <div style="font-size: 11px; color: #666;">⭐ ${driver.rating}</div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; font-size: 11px; color: #888;">
+                          <span style="background: ${driver.status === 'online' ? '#dcfce7' : '#f3f4f6'}; 
+                                       color: ${driver.status === 'online' ? '#16a34a' : '#6b7280'}; 
+                                       padding: 2px 8px; border-radius: 12px; text-transform: capitalize;">
+                            ${driver.status === 'online' ? '● Online' : driver.status === 'busy' ? '● Ocupado' : '○ Offline'}
+                          </span>
+                          <span>🏍️ ${driver.vehicle || 'Moto'}</span>
+                        </div>
+                      </div>
+                    `,
+                    position: driver.location
+                  });
+                  infoWindow.open(map);
+                }
+              }}
               icon={{
                 path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                scale: 5,
-                fillColor: driver.status === 'online' ? "#16a34a" : "#9ca3af",
+                scale: 6,
+                fillColor: driver.status === 'online' ? "#16a34a" : driver.status === 'busy' ? "#f59e0b" : "#9ca3af",
                 fillOpacity: 1,
-                strokeWeight: 1,
+                strokeWeight: 2,
                 strokeColor: "#ffffff",
                 rotation: Math.random() * 360
               }}

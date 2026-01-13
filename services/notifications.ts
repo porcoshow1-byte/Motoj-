@@ -60,7 +60,13 @@ export type NotificationType =
     | 'rideCompleted'      // Ambos: corrida finalizada
     | 'rideCancelled'      // Ambos: corrida cancelada
     | 'newMessage'         // Ambos: nova mensagem no chat
-    | 'paymentConfirmed';  // Passageiro: pagamento confirmado
+    | 'paymentConfirmed'   // Passageiro: pagamento confirmado
+    // Admin notifications
+    | 'adminNewDriver'     // Admin: novo motorista aguardando aprovação
+    | 'adminRideIssue'     // Admin: problema reportado em corrida
+    | 'adminPaymentPending'// Admin: pagamento pendente
+    | 'adminLowRating'     // Admin: avaliação baixa recebida
+    | 'adminSystemAlert';  // Admin: alerta do sistema
 
 interface NotificationData {
     title: string;
@@ -123,6 +129,39 @@ const notificationConfigs: Record<NotificationType, (data?: any) => Notification
         title: '💰 Pagamento confirmado!',
         body: `R$ ${data?.amount?.toFixed(2) || '0,00'} processado com sucesso`,
         tag: 'payment',
+    }),
+
+    // Admin Notifications
+    adminNewDriver: (data) => ({
+        title: '🆕 Novo piloto aguardando',
+        body: `${data?.driverName || 'Um novo piloto'} enviou documentos para verificação`,
+        tag: 'admin-driver',
+        requireInteraction: true,
+    }),
+
+    adminRideIssue: (data) => ({
+        title: '⚠️ Problema reportado',
+        body: `Corrida #${data?.rideId || 'N/A'} tem um problema reportado pelo passageiro`,
+        tag: 'admin-issue',
+        requireInteraction: true,
+    }),
+
+    adminPaymentPending: (data) => ({
+        title: '💳 Pagamento pendente',
+        body: `Transferência de R$ ${data?.amount?.toFixed(2) || '0,00'} pendente há ${data?.days || 1} dias`,
+        tag: 'admin-payment',
+    }),
+
+    adminLowRating: (data) => ({
+        title: '⭐ Avaliação baixa',
+        body: `${data?.driverName || 'Um piloto'} recebeu avaliação ${data?.rating || '2.0'}`,
+        tag: 'admin-rating',
+    }),
+
+    adminSystemAlert: (data) => ({
+        title: '🔔 Alerta do Sistema',
+        body: data?.message || 'Nova atualização disponível',
+        tag: 'admin-system',
     }),
 };
 

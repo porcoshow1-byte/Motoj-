@@ -17,8 +17,17 @@ export interface User {
   id: string;
   name: string;
   phone: string;
+  cpf?: string; // Added for registration
+  address?: string; // Added for registration
+  email?: string;
   rating: number;
-  avatar: string;
+  totalRides: number;
+  createdAt?: Date; // Added
+  status?: 'active' | 'blocked'; // Added
+  avatar?: string;
+  type: 'passenger';
+  isBlocked?: boolean;
+  walletBalance?: number;
 }
 
 export interface Driver {

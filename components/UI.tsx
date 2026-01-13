@@ -19,7 +19,7 @@ export const Button = ({
   disabled?: boolean;
 }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
-  
+
   const variants = {
     primary: "bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/20",
     secondary: "bg-gray-800 text-white hover:bg-gray-900",
@@ -46,16 +46,21 @@ export const Input = ({
   onChange,
   placeholder,
   type = 'text',
-  icon
+  icon,
+  readOnly = false,
+  className = '',
+  ...props
 }: {
   label?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  value: any;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   type?: string;
   icon?: React.ReactNode;
-}) => (
-  <div className="w-full">
+  readOnly?: boolean;
+  className?: string;
+} & React.InputHTMLAttributes<HTMLInputElement>) => (
+  <div className={`w-full ${className}`}>
     {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
     <div className="relative">
       <input
@@ -63,7 +68,9 @@ export const Input = ({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full p-3 ${icon ? 'pl-10' : ''} bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all`}
+        readOnly={readOnly}
+        className={`w-full p-3 ${icon ? 'pl-10' : ''} bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
+        {...props}
       />
       {icon && (
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -81,7 +88,7 @@ export const Card: React.FC<{ children?: React.ReactNode; className?: string }> 
 );
 
 export const Badge = ({ children, color = 'gray' }: { children?: React.ReactNode; color?: string }) => {
-  const colors: {[key: string]: string} = {
+  const colors: { [key: string]: string } = {
     green: 'bg-green-100 text-green-700',
     red: 'bg-red-100 text-red-700',
     blue: 'bg-blue-100 text-blue-700',
