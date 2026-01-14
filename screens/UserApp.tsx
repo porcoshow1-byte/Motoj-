@@ -14,10 +14,11 @@ import { SimulatedMap } from '../components/SimulatedMap';
 import { ChatModal } from '../components/ChatModal';
 import { ProfileScreen } from './ProfileScreen';
 import { SERVICES, APP_CONFIG, MOCK_DRIVER } from '../constants';
-import { ServiceType, RideRequest, User, Coords } from '../types';
+import { ServiceType, RideRequest, User, Coords, PaymentMethod, Company } from '../types';
 import { createRideRequest, subscribeToRide, cancelRide, getRideHistory } from '../services/ride';
 import { createPixPayment, checkPayment } from '../services/mercadopago';
 import { getOrCreateUserProfile } from '../services/user';
+import { getCompany } from '../services/company';
 import { calculateRoute, calculatePrice, reverseGeocode, searchAddress } from '../services/map';
 import { useAuth } from '../context/AuthContext';
 import { useGeoLocation } from '../hooks/useGeoLocation';
@@ -57,6 +58,8 @@ export const UserApp = () => {
 
   const [showDeliveryInfo, setShowDeliveryInfo] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceType>(ServiceType.MOTO_TAXI);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('pix');
+  const [userCompany, setUserCompany] = useState<Company | null>(null);
   const [rideStatus, setRideStatus] = useState('');
   const [routeInfo, setRouteInfo] = useState<{ distance: string, duration: string, distanceVal: number } | null>(null);
   const [calculatingRoute, setCalculatingRoute] = useState(false);
@@ -141,10 +144,15 @@ export const UserApp = () => {
     try {
       const profile = await getOrCreateUserProfile(authUser.uid, authUser.email || '', 'user');
       setCurrentUser(profile as User);
+
+      // Check for company
+      if (profile && 'companyId' in profile && profile.companyId) {
+        getCompany(profile.companyId).then(setUserCompany);
+      }
     } catch (err: any) {
       console.error("Erro crítico ao carregar perfil:", err);
       // Fallback robusto para evitar tela branca
-      setCurrentUser({
+      const mockUser = {
         id: authUser.uid,
         name: authUser.email?.split('@')[0] || 'Usuario Demo',
         email: authUser.email || '',
@@ -152,7 +160,8 @@ export const UserApp = () => {
         rating: 5,
         avatar: `https://ui-avatars.com/api/?name=${authUser.email}`,
         role: 'user'
-      } as User);
+      } as User;
+      setCurrentUser(mockUser);
     } finally {
       setLoadingProfile(false);
     }
@@ -392,7 +401,9 @@ export const UserApp = () => {
         routeInfo.distance,
         routeInfo.duration,
         deliveryDetails,
-        finalSecurityCode
+        finalSecurityCode,
+        selectedPaymentMethod,
+        selectedPaymentMethod === 'corporate' && userCompany ? userCompany.id : undefined
       );
 
       setCurrentRideId(rideId);
@@ -407,6 +418,12 @@ export const UserApp = () => {
 
   const handlePay = async () => {
     if (!currentRide) return;
+
+    if (currentRide.paymentMethod === 'corporate') {
+      alert('Esta corrida será faturada para sua empresa.');
+      return;
+    }
+
     setIsPaying(true);
 
     try {
@@ -652,6 +669,33 @@ export const UserApp = () => {
               );
             })}
           </div>
+
+          {/* Payment Method Selector */}
+          {userCompany && (
+            <div className="mb-6">
+              <h3 className="font-bold text-gray-800 mb-2">Forma de Pagamento</h3>
+              <div className="flex gap-3">
+                <div
+                  onClick={() => setSelectedPaymentMethod('pix')}
+                  className={`flex-1 p-3 rounded-xl border-2 cursor-pointer flex items-center justify-center gap-2 ${selectedPaymentMethod === 'pix' ? 'border-orange-500 bg-orange-50' : 'border-gray-100'}`}
+                >
+                  <QrCode size={20} className={selectedPaymentMethod === 'pix' ? 'text-orange-600' : 'text-gray-400'} />
+                  <span className={`font-bold ${selectedPaymentMethod === 'pix' ? 'text-gray-900' : 'text-gray-500'}`}>Pix / Dinheiro</span>
+                </div>
+                <div
+                  onClick={() => setSelectedPaymentMethod('corporate')}
+                  className={`flex-1 p-3 rounded-xl border-2 cursor-pointer flex items-center justify-center gap-2 ${selectedPaymentMethod === 'corporate' ? 'border-blue-500 bg-blue-50' : 'border-gray-100'}`}
+                >
+                  <div className="bg-blue-600 text-white text-[10px] items-center justify-center flex w-5 h-5 rounded-full font-bold">E</div>
+                  <div className="flex flex-col items-start leading-none">
+                    <span className={`font-bold ${selectedPaymentMethod === 'corporate' ? 'text-gray-900' : 'text-gray-500'}`}>Corporativo</span>
+                    <span className="text-[10px] text-gray-400 max-w-[80px] truncate">{userCompany.name}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Button fullWidth onClick={handleBook} isLoading={isBooking} className="text-lg shadow-xl shadow-orange-500/20 py-4">Confirmar {SERVICES.find(s => s.id === selectedService)?.name}</Button>
         </div>
       </>
@@ -775,7 +819,10 @@ export const UserApp = () => {
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-white rounded-t-3xl shadow-2xl p-5 pb-8">
         <div className="flex items-center justify-between mb-4">
           {currentRide?.securityCode ? (<div className="bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100 flex items-center gap-2 shadow-sm"><Lock size={16} className="text-orange-600" /><div className="flex flex-col"><span className="text-[10px] text-orange-800 font-bold leading-none">Código</span><span className="text-lg font-mono font-bold leading-none text-orange-900">{currentRide.securityCode}</span></div></div>) : <div></div>}
-          <Badge color="blue">{currentRide?.serviceType?.replace('_', ' ')}</Badge>
+          <div className="flex gap-2">
+            {currentRide?.paymentMethod === 'corporate' && <Badge color="orange">Corporativo</Badge>}
+            <Badge color="blue">{currentRide?.serviceType?.replace('_', ' ')}</Badge>
+          </div>
         </div>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

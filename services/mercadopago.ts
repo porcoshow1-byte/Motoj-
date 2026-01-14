@@ -48,14 +48,15 @@ interface PixPaymentResponse {
  * Cria um pagamento PIX real usando a API do Mercado Pago
  * @warning SECURITY: Isso deve ser movido para o backend em produção para não expor o ACCESS_TOKEN
  */
-const createRealPixPayment = async (rideId: string, price: number, email: string): Promise<PixPaymentResponse> => {
+const createRealPixPayment = async (rideId: string, price: number, email: string, accessToken?: string): Promise<PixPaymentResponse> => {
   const idempotencyKey = `ride_${rideId}_${Date.now()}`;
+  const token = accessToken || ACCESS_TOKEN;
 
   const response = await fetch('https://api.mercadopago.com/v1/payments', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Authorization': `Bearer ${token}`,
       'X-Idempotency-Key': idempotencyKey
     },
     body: JSON.stringify({
@@ -89,10 +90,11 @@ const createRealPixPayment = async (rideId: string, price: number, email: string
 /**
  * Verifica o status de um pagamento real
  */
-const checkRealPaymentStatus = async (paymentId: string): Promise<string> => {
+const checkRealPaymentStatus = async (paymentId: string, accessToken?: string): Promise<string> => {
+  const token = accessToken || ACCESS_TOKEN;
   const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
     headers: {
-      'Authorization': `Bearer ${ACCESS_TOKEN}`
+      'Authorization': `Bearer ${token}`
     }
   });
 
@@ -107,12 +109,15 @@ const checkRealPaymentStatus = async (paymentId: string): Promise<string> => {
 // FUNÇÕES PÚBLICAS (FACADE)
 // ==========================================
 
-export const createPixPayment = async (rideId: string, price: number, email: string) => {
-  if (isRealPaymentMode()) {
+export const createPixPayment = async (rideId: string, price: number, email: string, options?: { accessToken?: string }) => {
+  const token = options?.accessToken || ACCESS_TOKEN;
+  const isReal = (token && !token.includes('0000'));
+
+  if (isReal) {
     console.log("💰 Modo Real: Criando PIX no Mercado Pago...");
-    return await createRealPixPayment(rideId, price, email);
+    return await createRealPixPayment(rideId, price, email, token);
   } else {
-    console.log("⚠️ Modo Simulado: Criando PIX fake (configure .env para real)");
+    console.log("⚠️ Modo Simulado: Criando PIX fake (configure .env ou Painel Admin)");
     // Retorna dados falsos para teste
     return {
       id: "sim_" + rideId,
@@ -124,9 +129,12 @@ export const createPixPayment = async (rideId: string, price: number, email: str
   }
 };
 
-export const checkPayment = async (paymentId: string) => {
-  if (isRealPaymentMode()) {
-    return await checkRealPaymentStatus(paymentId);
+export const checkPayment = async (paymentId: string, options?: { accessToken?: string }) => {
+  const token = options?.accessToken || ACCESS_TOKEN;
+  const isReal = (token && !token.includes('0000'));
+
+  if (isReal) {
+    return await checkRealPaymentStatus(paymentId, token);
   } else {
     // Simulado: sempre retorna pendente até processar explicitamente
     return 'pending';

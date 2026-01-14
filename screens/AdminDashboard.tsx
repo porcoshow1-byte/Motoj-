@@ -5,7 +5,7 @@ import {
   Loader2, RefreshCcw, AlertTriangle, Download, Calendar, CheckSquare, Square,
   X, Phone, Car, Star, Shield, Plus, History, MessageSquare, Send, ChevronRight, ChevronLeft,
   Leaf, Building2, DollarSign, Calculator, GripVertical, MapPin, Package, Navigation, Clock, Route,
-  AlertCircle, CheckCircle, Paperclip, Trash2, Edit2
+  AlertCircle, CheckCircle, Paperclip, Trash2, Edit2, Zap, Mail, Share2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Card, Button, Badge, Input } from '../components/UI';
@@ -15,6 +15,8 @@ import { SimulatedMap } from '../components/SimulatedMap';
 import { Driver, RideRequest, User } from '../types';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { APP_CONFIG } from '../constants';
+import { getSettings, saveSettings, SystemSettings } from '../services/settings';
+import { sendEmail, testSMTPConnection } from '../services/email';
 
 const libraries: ("places" | "geometry")[] = ['places', 'geometry'];
 
@@ -492,6 +494,21 @@ export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
 
+  // Companies Tab State
+  const [companies, setCompanies] = useState<any[]>([]); // Mock list of companies
+  const [showCompanyList, setShowCompanyList] = useState(false);
+
+  useEffect(() => {
+    // Mock load companies
+    if (activeTab === 'companies') {
+      // In real app, fetch from API
+      setCompanies([
+        { id: '1', name: 'Tech Solutions Ltd', cnpj: '12.345.678/0001-90', email: 'contato@techsolutions.com', creditLimit: 5000, usedCredit: 1200 },
+        { id: '2', name: 'Logística Express', cnpj: '98.765.432/0001-10', email: 'admin@logexpress.com.br', creditLimit: 10000, usedCredit: 8500 },
+      ]);
+    }
+  }, [activeTab]);
+
   // Dashboard Date Filter
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -616,53 +633,31 @@ export const AdminDashboard = () => {
     return `${prefix}-${dateStr}-${random}`;
   };
 
-  // Settings State
-  const [settings, setSettings] = useState({
-    // Moto pricing
-    basePrice: 5.00,
-    pricePerKm: 2.00,
-    platformFee: 20,
-    // Bike pricing
-    bikeBasePrice: 3.00,
-    bikePricePerKm: 1.50,
-    bikeMaxDistance: 5,
-    bikePlatformFee: 15,
-    // App info
-    appName: 'MotoJá',
-    supportPhone: '(11) 99999-9999',
-    supportEmail: 'suporte@motoja.com.br',
-    // Company data
-    companyName: 'MotoJá Transportes LTDA',
-    companyCnpj: '00.000.000/0001-00',
-    companyAddress: 'Rua das Motos, 123 - Centro',
-    companyCity: 'Avaré',
-    companyState: 'SP',
-    companyCep: '18700-000',
-    companyEmail: 'contato@motoja.com.br',
-    companyPhone: '(14) 3732-0000',
-  });
-  const [savingSettings, setSavingSettings] = useState(false);
 
+  // Settings State using Global Service
+  const [settings, setSettings] = useState<SystemSettings>(getSettings());
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Load latest settings on mount
   useEffect(() => {
-    const saved = localStorage.getItem('motoja_settings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Merge with defaults to ensure all keys exist (handles legacy localStorage)
-        setSettings(prev => ({ ...prev, ...parsed }));
-      } catch (e) {
-        console.error("FAILED to load settings", e);
-      }
-    }
+    setSettings(getSettings());
   }, []);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
     // Simulate API call
     await new Promise(r => setTimeout(r, 800));
-    localStorage.setItem('motoja_settings', JSON.stringify(settings));
+    saveSettings(settings); // Persist to local storage via service
     setSavingSettings(false);
-    alert('Configurações salvas com sucesso!');
+    alert('Configurações e Integrações salvas com sucesso!');
+  };
+
+  const handleTestSMTP = async () => {
+    setSmtpTestResult(null);
+    const result = await testSMTPConnection();
+    setSmtpTestResult(result);
+    if (result.success) alert(result.message);
   };
 
   const loadData = async () => {
@@ -1566,17 +1561,18 @@ export const AdminDashboard = () => {
         <div className="flex-1 px-4 overflow-y-auto no-scrollbar">
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-3 px-2">Principal</p>
           <SidebarItem id="dashboard" icon={<LayoutDashboard size={20} />} label="Visão Geral" />
+          <SidebarItem id="companies" icon={<Building2 size={20} />} label="Empresas (B2B)" />
           <SidebarItem id="consultation" icon={<Calculator size={20} />} label="Simulação / Pedido" />
           <SidebarItem id="live_map" icon={<Map size={20} />} label="Mapa ao Vivo" />
 
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-3 mt-6 px-2">Gestão</p>
           <SidebarItem id="drivers" icon={<Bike size={20} />} label="Pilotos" />
           <SidebarItem id="users" icon={<Users size={20} />} label="Passageiros" />
-          <SidebarItem id="occurrences" icon={<AlertTriangle size={20} />} label="Ocorrências" badge={notifications.filter(n => !n.read && (n.type === 'ride_issue' || n.type === 'payment' || n.type === 'feedback')).length || undefined} />
           <SidebarItem id="reports" icon={<FileText size={20} />} label="Relatórios" />
 
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-3 mt-6 px-2">Configuração</p>
           <SidebarItem id="settings" icon={<Settings size={20} />} label="Ajustes" />
+          <SidebarItem id="integrations" icon={<Zap size={20} />} label="Integrações" />
         </div>
 
         <div className="p-4 border-t border-gray-800">
@@ -1610,6 +1606,57 @@ export const AdminDashboard = () => {
             <button onClick={loadData} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full" title="Atualizar dados">
               <RefreshCcw size={20} />
             </button>
+
+            {/* --- COMPANIES TAB CONTENT --- */}
+            {activeTab === 'companies' && (
+              <div className="fixed inset-0 top-16 left-64 z-10 bg-gray-100 p-8 overflow-y-auto transform transition-all duration-300">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Gestão de Empresas Parceiras</h2>
+                    <p className="text-gray-500">Gerencie clientes corporativos e limites de crédito.</p>
+                  </div>
+                  <Button><Plus size={20} /> Nova Empresa</Button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {companies.map(company => (
+                    <div key={company.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
+                            <Building2 size={24} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg text-gray-900">{company.name}</h3>
+                            <p className="text-sm text-gray-500">{company.cnpj}</p>
+                          </div>
+                        </div>
+                        <Badge color={company.usedCredit > company.creditLimit * 0.9 ? 'red' : 'green'}>{company.usedCredit > company.creditLimit * 0.9 ? 'Limite Crítico' : 'Ativo'}</Badge>
+                      </div>
+
+                      <div className="space-y-3 mb-6">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Limite de Crédito</span>
+                          <span className="font-bold">R$ {company.creditLimit.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Utilizado</span>
+                          <span className="font-bold text-gray-800">R$ {company.usedCredit.toFixed(2)}</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div className="bg-blue-600 h-full rounded-full" style={{ width: `${(company.usedCredit / company.creditLimit) * 100}%` }}></div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <Button fullWidth variant="outline" onClick={() => alert('Edição em breve')}>Editar</Button>
+                        <Button fullWidth onClick={() => alert(`Acesso ao painel da ${company.name} simulado. Para ver o painel real, acesse como Empresa na tela inicial.`)}>Ver Painel</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Notifications Bell */}
             <div className="relative">
@@ -3166,7 +3213,7 @@ export const AdminDashboard = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                           <Input
                             value={settings.companyPhone}
-                            onChange={(e) => setSettings({ ...settings, companyPhone: e.target.value })}
+                            onChange={(e) => setSettingsState({ ...settings, companyPhone: e.target.value })}
                             placeholder="(00) 0000-0000"
                           />
                         </div>
@@ -3177,7 +3224,7 @@ export const AdminDashboard = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Completo</label>
                         <AddressInput
                           value={settings.companyAddress}
-                          onChange={(val) => setSettings({ ...settings, companyAddress: val })}
+                          onChange={(val) => setSettingsState({ ...settings, companyAddress: val })}
                           placeholder="Rua, Número, Bairro"
                         />
                       </div>
@@ -3226,6 +3273,177 @@ export const AdminDashboard = () => {
                 <Button onClick={handleSaveSettings} isLoading={savingSettings} className="w-full md:w-auto px-8">
                   Salvar Todas as Alterações
                 </Button>
+              </div>
+            </div>
+          ) : activeTab === 'integrations' ? (
+            <div className="max-w-5xl mx-auto space-y-6 animate-fade-in p-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Integrações do Sistema</h2>
+                  <p className="text-gray-500 text-sm">Configure gateways de pagamento, automações e email.</p>
+                </div>
+                <Button onClick={handleSaveSettings} isLoading={savingSettings}>Salvar Integrações</Button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Payment Gateways */}
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                    <div className="bg-green-100 p-2 rounded-lg text-green-600"><DollarSign size={24} /></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Gateway de Pagamento</h3>
+                      <p className="text-sm text-gray-500">Para cobrança de faturas B2B</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Provedor</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-500"
+                        value={settings.paymentGateway.provider}
+                        onChange={(e) => setSettings({ ...settings, paymentGateway: { ...settings.paymentGateway, provider: e.target.value as any } })}
+                      >
+                        <option value="none">Desativado</option>
+                        <option value="mercadopago">Mercado Pago</option>
+                        <option value="asaas">Asaas</option>
+                        <option value="stripe">Stripe</option>
+                      </select>
+                    </div>
+                    {settings.paymentGateway.provider !== 'none' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Chave de API (Public Key)</label>
+                          <Input
+                            value={settings.paymentGateway.apiKey}
+                            onChange={(e) => setSettings({ ...settings, paymentGateway: { ...settings.paymentGateway, apiKey: e.target.value } })}
+                            placeholder="Ex: APP_USR-..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Chave Secreta (Access Token)</label>
+                          <Input
+                            type="password"
+                            value={settings.paymentGateway.secretKey || ''}
+                            onChange={(e) => setSettings({ ...settings, paymentGateway: { ...settings.paymentGateway, secretKey: e.target.value } })}
+                            placeholder="Ex: APP_USR-..."
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Email SMTP */}
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                    <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Mail size={24} /></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Servidor de Email (SMTP)</h3>
+                      <p className="text-sm text-gray-500">Para envio de notificações do sistema</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Host SMTP</label>
+                        <Input
+                          value={settings.smtp.host}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, host: e.target.value } })}
+                          placeholder="smtp.gmail.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Porta</label>
+                        <Input
+                          type="number"
+                          value={settings.smtp.port}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, port: parseInt(e.target.value) } })}
+                          placeholder="587"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email Remetente</label>
+                        <Input
+                          value={settings.smtp.fromEmail}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, fromEmail: e.target.value } })}
+                          placeholder="noreply@app.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome Remetente</label>
+                        <Input
+                          value={settings.smtp.fromName}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, fromName: e.target.value } })}
+                          placeholder="Suporte MotoJá"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                        <Input
+                          value={settings.smtp.user}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, user: e.target.value } })}
+                          placeholder="user@email.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                        <Input
+                          type="password"
+                          value={settings.smtp.pass}
+                          onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, pass: e.target.value } })}
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                    <div className="pt-2">
+                      <Button variant="outline" fullWidth onClick={handleTestSMTP}>
+                        Testar Conexão SMTP
+                      </Button>
+                      {smtpTestResult && (
+                        <div className={`mt-2 text-xs font-bold ${smtpTestResult.success ? 'text-green-600' : 'text-red-500'}`}>
+                          {smtpTestResult.success ? '✅ ' : '❌ '}{smtpTestResult.message}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+
+                {/* N8N Automation */}
+                <Card className="p-6 md:col-span-2">
+                  <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                    <div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Share2 size={24} /></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Automação com N8N</h3>
+                      <p className="text-sm text-gray-500">Webhooks para eventos do sistema</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="mt-2">
+                      <input
+                        type="checkbox"
+                        checked={settings.n8n.enabled}
+                        onChange={(e) => setSettings({ ...settings, n8n: { ...settings.n8n, enabled: e.target.checked } })}
+                        className="w-5 h-5 text-orange-600 rounded focus:ring-orange-500"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-1">Ativar Integração N8N</label>
+                        <p className="text-xs text-gray-500 mb-3">Envia webhooks para o fluxo do N8N quando eventos ocorrem (ex: nova corrida, novo motorista).</p>
+                        <Input
+                          value={settings.n8n.webhookUrl}
+                          onChange={(e) => setSettings({ ...settings, n8n: { ...settings.n8n, webhookUrl: e.target.value } })}
+                          placeholder="https://n8n.seuserver.com/webhook/..."
+                          disabled={!settings.n8n.enabled}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </Card>
               </div>
             </div>
           ) : activeTab === 'users' ? (

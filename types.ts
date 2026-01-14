@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Role = 'landing' | 'user' | 'driver' | 'admin' | 'selection';
+export type Role = 'landing' | 'user' | 'driver' | 'admin' | 'selection' | 'company';
 
 export enum ServiceType {
   MOTO_TAXI = 'MOTO_TAXI',
@@ -11,6 +11,20 @@ export enum ServiceType {
 export interface Coords {
   lat: number;
   lng: number;
+}
+
+export type PaymentMethod = 'pix' | 'cash' | 'corporate';
+
+export interface Company {
+  id: string;
+  name: string;
+  cnpj: string;
+  email: string;
+  status: 'active' | 'blocked';
+  address?: string;
+  logoUrl?: string;
+  creditLimit?: number;
+  usedCredit?: number;
 }
 
 export interface User {
@@ -28,6 +42,7 @@ export interface User {
   type: 'passenger';
   isBlocked?: boolean;
   walletBalance?: number;
+  companyId?: string; // Added for Corporate Module
 }
 
 export interface Driver {
@@ -56,10 +71,14 @@ export interface RideRequest {
   duration: string;
   serviceType: ServiceType;
   status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
-  paymentStatus: 'pending' | 'completed';
+  paymentStatus: 'pending' | 'completed' | 'pending_invoice'; // 'pending_invoice' for corporate
   passenger: User;
   driver?: Driver;
   createdAt: number;
+
+  // Payment Details
+  paymentMethod?: PaymentMethod;
+  companyId?: string; // For corporate billing
 
   // New fields for Delivery & Security
   securityCode?: string;

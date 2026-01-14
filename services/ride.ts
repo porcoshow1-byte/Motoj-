@@ -1,6 +1,7 @@
 import { db, isMockMode } from './firebase';
 import { collection, addDoc, updateDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp, limit, getDocs } from 'firebase/firestore';
-import { RideRequest, ServiceType, User, Driver, Coords } from '../types';
+import { RideRequest, ServiceType, User, Driver, Coords, PaymentMethod } from '../types';
+import { triggerN8NWebhook } from './n8n';
 
 const RIDES_COLLECTION = 'rides';
 const MOCK_STORAGE_KEY = 'motoja_mock_rides';
@@ -36,7 +37,9 @@ export const createRideRequest = async (
   distance: string,
   duration: string,
   deliveryDetails?: RideRequest['deliveryDetails'],
-  securityCode?: string
+  securityCode?: string,
+  paymentMethod: PaymentMethod = 'pix',
+  companyId?: string
 ): Promise<string> => {
 
   if (isMockMode || !db) {
@@ -53,15 +56,18 @@ export const createRideRequest = async (
       distance,
       duration,
       status: 'pending',
-      paymentStatus: 'pending',
       createdAt: Date.now(),
       driver: undefined,
       deliveryDetails,
-      securityCode
+      securityCode,
+      companyId,
+      paymentMethod,
+      paymentStatus: paymentMethod === 'corporate' ? 'pending_invoice' : 'pending'
     };
     const rides = getMockRides();
     rides.push(newRide);
     saveMockRides(rides);
+    triggerN8NWebhook('ride_requested', newRide);
     return id;
   }
 
@@ -77,12 +83,15 @@ export const createRideRequest = async (
       distance,
       duration,
       status: 'pending',
-      paymentStatus: 'pending',
       createdAt: serverTimestamp(),
       driver: null,
+      paymentMethod,
+      ...(companyId && { companyId }),
+      paymentStatus: paymentMethod === 'corporate' ? 'pending_invoice' : 'pending',
       ...(deliveryDetails && { deliveryDetails }),
       ...(securityCode && { securityCode })
     });
+    triggerN8NWebhook('ride_requested', { id: docRef.id, passenger, origin, destination, price });
     return docRef.id;
   } catch (error) {
     console.error("Erro ao criar corrida no Firestore:", error);
@@ -186,14 +195,17 @@ export const getRideHistory = async (userId: string, role: 'passenger' | 'driver
 export const acceptRide = async (rideId: string, driver: Driver) => {
   if (isMockMode || !db) {
     updateMockRide(rideId, { status: 'accepted', driver });
+    triggerN8NWebhook('ride_accepted', { rideId, driver });
     return;
   }
   const rideRef = doc(db, RIDES_COLLECTION, rideId);
   await updateDoc(rideRef, {
     status: 'accepted',
+
     driver: driver,
     acceptedAt: serverTimestamp()
   });
+  triggerN8NWebhook('ride_accepted', { rideId, driver });
 };
 
 export const startRide = async (rideId: string) => {
@@ -222,6 +234,7 @@ export const markRideAsPaid = async (rideId: string) => {
 export const completeRide = async (rideId: string) => {
   if (isMockMode || !db) {
     updateMockRide(rideId, { status: 'completed' });
+    triggerN8NWebhook('ride_completed', { rideId });
     return;
   }
   const rideRef = doc(db, RIDES_COLLECTION, rideId);
@@ -229,11 +242,14 @@ export const completeRide = async (rideId: string) => {
     status: 'completed',
     completedAt: serverTimestamp()
   });
+
+  triggerN8NWebhook('ride_completed', { rideId });
 };
 
 export const cancelRide = async (rideId: string) => {
   if (isMockMode || !db) {
     updateMockRide(rideId, { status: 'cancelled' });
+    triggerN8NWebhook('ride_cancelled', { rideId });
     return;
   }
   const rideRef = doc(db, RIDES_COLLECTION, rideId);
@@ -241,6 +257,8 @@ export const cancelRide = async (rideId: string) => {
     status: 'cancelled',
     cancelledAt: serverTimestamp()
   });
+
+  triggerN8NWebhook('ride_cancelled', { rideId });
 };
 
 /**
