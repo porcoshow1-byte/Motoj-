@@ -861,9 +861,8 @@ export const DriverApp = () => {
               <div className="flex gap-3">
                 <Button
                   fullWidth
-                  variant="outline"
                   onClick={() => setShowOfflineConfirm(false)}
-                  className="border-gray-500 text-white bg-gray-700 hover:bg-gray-600"
+                  className="border border-gray-500 !text-white bg-gray-700 hover:bg-gray-600"
                 >
                   Não
                 </Button>
