@@ -8,15 +8,17 @@ export const Button = ({
   className = '',
   isLoading = false,
   fullWidth = false,
-  disabled = false
+  disabled = false,
+  style
 }: {
   children?: React.ReactNode;
-  onClick?: () => void;
+  onClick?: (e?: any) => void;
   variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'success';
   className?: string;
   isLoading?: boolean;
   fullWidth?: boolean;
   disabled?: boolean;
+  style?: React.CSSProperties;
 }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
 
@@ -33,6 +35,7 @@ export const Button = ({
       onClick={onClick}
       disabled={disabled || isLoading}
       className={`${baseStyle} ${variants[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
+      style={style}
     >
       {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
       {children}
@@ -87,7 +90,7 @@ export const Card: React.FC<{ children?: React.ReactNode; className?: string }> 
   </div>
 );
 
-export const Badge = ({ children, color = 'gray' }: { children?: React.ReactNode; color?: string }) => {
+export const Badge = ({ children, color = 'gray', size = 'md', className = '' }: { children?: React.ReactNode; color?: string; size?: 'sm' | 'md' | 'lg'; className?: string }) => {
   const colors: { [key: string]: string } = {
     green: 'bg-green-100 text-green-700',
     red: 'bg-red-100 text-red-700',
@@ -95,8 +98,15 @@ export const Badge = ({ children, color = 'gray' }: { children?: React.ReactNode
     orange: 'bg-orange-100 text-orange-700',
     gray: 'bg-gray-100 text-gray-700',
   };
+
+  const sizes = {
+    sm: 'text-[10px] px-1.5 py-0.5',
+    md: 'text-xs px-2 py-1',
+    lg: 'text-sm px-3 py-1.5'
+  };
+
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[color] || colors.gray}`}>
+    <span className={`rounded-full font-medium ${sizes[size] || sizes.md} ${colors[color] || colors.gray} ${className}`}>
       {children}
     </span>
   );

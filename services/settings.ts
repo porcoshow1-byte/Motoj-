@@ -58,6 +58,16 @@ export interface SystemSettings {
     companyEmail: string;
     companyPhone: string;
 
+    // Visual Customization
+    visual: {
+        loginBackgroundImage: string; // URL or Base64 (Desktop)
+        mobileBackgroundImage: string; // URL or Base64 (Mobile)
+        appLogoUrl: string; // URL or Base64 (Optional)
+        primaryColor: string; // Optional branding
+        loginTitle: string; // Custom title
+        loginSubtitle: string; // Custom subtitle
+    };
+
     // Integations
     paymentGateway: PaymentGatewaySettings;
     n8n: N8NSettings;
@@ -84,6 +94,15 @@ const DEFAULT_SETTINGS: SystemSettings = {
     companyCep: '18700-000',
     companyEmail: 'contato@motoja.com.br',
     companyPhone: '(14) 3732-0000',
+
+    visual: {
+        loginBackgroundImage: '/assets/admin_login.png',
+        mobileBackgroundImage: '',
+        appLogoUrl: '',
+        primaryColor: '#f97316', // Orange-500
+        loginTitle: 'MotoJá',
+        loginSubtitle: 'Gestão completa da plataforma de mobilidade em um único lugar.',
+    },
 
     paymentGateway: {
         provider: 'none',
@@ -124,6 +143,7 @@ export const getSettings = (): SystemSettings => {
                 paymentGateway: { ...DEFAULT_SETTINGS.paymentGateway, ...(parsed.paymentGateway || {}) },
                 n8n: { ...DEFAULT_SETTINGS.n8n, ...(parsed.n8n || {}) },
                 smtp: { ...DEFAULT_SETTINGS.smtp, ...(parsed.smtp || {}) },
+                visual: { ...DEFAULT_SETTINGS.visual, ...(parsed.visual || {}) },
             };
         } catch (e) {
             console.error('Failed to parse settings', e);

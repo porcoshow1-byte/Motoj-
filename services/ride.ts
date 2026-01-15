@@ -17,6 +17,74 @@ const saveMockRides = (rides: RideRequest[]) => {
   localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(rides));
 };
 
+// Mock Data Injection for Corporate Testing
+export const injectMockCorporateRides = (companyId: string) => {
+  const rides = getMockRides();
+  const hasCorporate = rides.some(r => r.paymentMethod === 'corporate' && r.companyId === companyId);
+
+  if (hasCorporate) return; // Already injected
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const year = now.getFullYear();
+
+  const newRides: any[] = [];
+
+  // 1. Current Month (Open Invoice) - 5 days ago
+  newRides.push({
+    id: `ride_curr_${Date.now()}_1`,
+    passenger: { id: 'u1', name: 'João Silva', phone: '11999999999', rating: 4.8, totalRides: 12, type: 'passenger' },
+    origin: 'Av. Paulista, 1000',
+    destination: 'Aeroporto Congonhas',
+    price: 45.50,
+    status: 'completed',
+    createdAt: new Date(year, currentMonth, now.getDate() - 2, 14, 30).getTime(),
+    paymentMethod: 'corporate',
+    companyId,
+    paymentStatus: 'pending_invoice',
+    distance: '12km',
+    duration: '35min',
+    serviceType: 'MOTO_TAXI'
+  });
+
+  // 2. Last Month (Overdue/Closed) - 40 days ago
+  newRides.push({
+    id: `ride_last_${Date.now()}_2`,
+    passenger: { id: 'u2', name: 'Maria Souza', phone: '11988888888', rating: 4.9, totalRides: 45, type: 'passenger' },
+    origin: 'Rua Funchal, 200',
+    destination: 'Av. Faria Lima, 3500',
+    price: 22.90,
+    status: 'completed',
+    createdAt: new Date(year, currentMonth - 1, 15, 9, 15).getTime(),
+    paymentMethod: 'corporate',
+    companyId,
+    paymentStatus: 'completed', // Paid
+    distance: '5km',
+    duration: '15min',
+    serviceType: 'MOTO_TAXI'
+  });
+
+  // 3. Last Month (Overdue) - 35 days ago (Simulating unpaid)
+  newRides.push({
+    id: `ride_late_${Date.now()}_3`,
+    passenger: { id: 'u3', name: 'Pedro Santos', phone: '11977777777', rating: 4.5, totalRides: 8, type: 'passenger' },
+    origin: 'Centro',
+    destination: 'Berrini',
+    price: 35.00,
+    status: 'completed',
+    createdAt: new Date(year, currentMonth - 1, 20, 18, 0).getTime(),
+    paymentMethod: 'corporate',
+    companyId,
+    paymentStatus: 'pending_invoice',
+    distance: '15km',
+    duration: '45min',
+    serviceType: 'MOTO_TAXI'
+  });
+
+  saveMockRides([...rides, ...newRides]);
+  console.log('Mock Corporate Rides Injected');
+};
+
 const updateMockRide = (rideId: string, updates: Partial<RideRequest>) => {
   const rides = getMockRides();
   const index = rides.findIndex(r => r.id === rideId);
@@ -122,12 +190,39 @@ export const subscribeToRide = (rideId: string, onUpdate: (ride: RideRequest) =>
   });
 };
 
-export const subscribeToPendingRides = (onUpdate: (rides: RideRequest[]) => void) => {
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; // Earth radius in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const deg2rad = (deg: number) => deg * (Math.PI / 180);
+
+export const subscribeToPendingRides = (
+  onUpdate: (rides: RideRequest[]) => void,
+  driverLocation?: Coords | null,
+  radiusKm: number = 20
+) => {
   if (isMockMode || !db) {
     const interval = setInterval(() => {
       const rides = getMockRides();
       const pending = rides
-        .filter(r => r.status === 'pending')
+        .filter(r => {
+          if (r.status !== 'pending') return false;
+          if (driverLocation && r.origin) {
+            const originObj = r.origin as any;
+            if (typeof originObj === 'object' && 'lat' in originObj) {
+              return calculateDistance(driverLocation.lat, driverLocation.lng, originObj.lat, originObj.lng) <= radiusKm;
+            }
+          }
+          return true;
+        })
         .sort((a, b) => b.createdAt - a.createdAt);
       onUpdate(pending);
     }, 1000);
@@ -143,11 +238,21 @@ export const subscribeToPendingRides = (onUpdate: (rides: RideRequest[]) => void
     const rides: RideRequest[] = [];
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      rides.push({
+      const ride = {
         id: doc.id,
         ...data,
         createdAt: data.createdAt?.seconds ? data.createdAt.seconds * 1000 : Date.now()
-      } as RideRequest);
+      } as RideRequest;
+
+      // Filter by radius if location is known
+      const rideOrigin = ride.origin as any; // Cast for flexibility if dealing with mixed types
+      if (driverLocation && rideOrigin && typeof rideOrigin === 'object' && 'lat' in rideOrigin) {
+        if (calculateDistance(driverLocation.lat, driverLocation.lng, rideOrigin.lat, rideOrigin.lng) <= radiusKm) {
+          rides.push(ride);
+        }
+      } else {
+        rides.push(ride);
+      }
     });
 
     rides.sort((a, b) => b.createdAt - a.createdAt);

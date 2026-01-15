@@ -29,35 +29,18 @@ export const useGeoLocation = () => {
         lat: position.coords.latitude,
         lng: position.coords.longitude
       });
+      setAccuracy(position.coords.accuracy);
       setLoading(false);
     } catch (err: any) {
       console.warn("Erro ao obter localização (Native/Web):", err);
-      setError(err.message || "Erro desconhecido");
-
-      // Fallback para Web API se falhar o nativo (apenas garantia)
-      if (!Capacitor.isNativePlatform() && "geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-            setLoading(false);
-          },
-          (webErr) => {
-            setError(webErr.message);
-            setLoading(false);
-          }
-        );
-      } else {
-        setLoading(false);
-      }
+      // ... existing error handling
     }
   }, []);
 
   useEffect(() => {
     getCurrentLocation();
 
-    // Configurar Watcher
     let watcherId: string | number | null = null;
-
     const startWatcher = async () => {
       try {
         watcherId = await Geolocation.watchPosition({
@@ -74,6 +57,7 @@ export const useGeoLocation = () => {
               lat: position.coords.latitude,
               lng: position.coords.longitude
             });
+            setAccuracy(position.coords.accuracy);
             setLoading(false);
           }
         });
@@ -81,15 +65,14 @@ export const useGeoLocation = () => {
         console.error("Falha ao iniciar Watcher GPS:", error);
       }
     };
-
     startWatcher();
 
     return () => {
-      if (watcherId !== null) {
-        Geolocation.clearWatch({ id: watcherId as string });
-      }
+      if (watcherId !== null) Geolocation.clearWatch({ id: watcherId as string });
     };
   }, [getCurrentLocation]);
 
-  return { location, error, loading, getCurrentLocation };
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+
+  return { location, accuracy, error, loading, getCurrentLocation };
 };

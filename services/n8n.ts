@@ -1,7 +1,7 @@
 
 import { getSettings } from './settings';
 
-type WebhookEvent = 'ride_requested' | 'ride_accepted' | 'ride_completed' | 'ride_cancelled' | 'driver_approved';
+type WebhookEvent = 'ride_requested' | 'ride_accepted' | 'ride_completed' | 'ride_cancelled' | 'driver_approved' | 'support_ticket_created';
 
 interface WebhookPayload {
     event: WebhookEvent;

@@ -5,12 +5,16 @@ import {
   Loader2, RefreshCcw, AlertTriangle, Download, Calendar, CheckSquare, Square,
   X, Phone, Car, Star, Shield, Plus, History, MessageSquare, Send, ChevronRight, ChevronLeft,
   Leaf, Building2, DollarSign, Calculator, GripVertical, MapPin, Package, Navigation, Clock, Route,
-  AlertCircle, CheckCircle, Paperclip, Trash2, Edit2, Zap, Mail, Share2
+  AlertCircle, CheckCircle, Paperclip, Trash2, Edit2, Zap, Mail, Share2, Palette, Image as ImageIcon, Smartphone, LifeBuoy
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Card, Button, Badge, Input } from '../components/UI';
 import { fetchDashboardData, DashboardData } from '../services/admin';
 import { updateUserProfile } from '../services/user';
+import { getAllCompanies, saveCompany } from '../services/company';
+import { subscribeToTickets, SupportTicket } from '../services/support';
+import { playSound } from '../services/audio';
+import { CompanyDashboard } from './CompanyDashboard';
 import { SimulatedMap } from '../components/SimulatedMap';
 import { Driver, RideRequest, User } from '../types';
 import { useJsApiLoader } from '@react-google-maps/api';
@@ -483,7 +487,254 @@ const SearchingOverlay = ({ show }: { show: boolean }) => {
   );
 };
 
-export const AdminDashboard = () => {
+const CompanyFormModal = ({ company, onClose, onSave }: { company?: any; onClose: () => void; onSave: (data: any) => void }) => {
+  const [formData, setFormData] = useState({
+    name: company?.name || '',
+    cnpj: company?.cnpj || '',
+    email: company?.email || '',
+    phone: company?.phone || '',
+    creditLimit: company?.creditLimit || 1000,
+    address: company?.address || '',
+    // Address decomposition (initially empty or parsed if possible, simplified here)
+    cep: '',
+    street: '',
+    number: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    complement: '',
+    logoUrl: company?.logoUrl || '',
+    password: '',
+    confirmPassword: ''
+  });
+
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  // If editing, try to fill address fields if they adhere to the format, 
+  // otherwise just leave them for manual correction (or keep main address string as fallback)
+  useEffect(() => {
+    if (company && company.address) {
+      // Basic attempt to parse or just leave mostly empty for user to refine
+      // Ideally, the backend would return structured data. For now, we respect the string.
+      setFormData(prev => ({ ...prev, address: company.address }));
+    }
+  }, [company]);
+
+  const handleCepBlur = async () => {
+    const cep = formData.cep.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setLoadingCep(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setFormData(prev => ({
+            ...prev,
+            street: data.logradouro,
+            neighborhood: data.bairro,
+            city: data.localidade,
+            state: data.uf,
+            // Focus number field logic could go here
+          }));
+        } else {
+          alert('CEP não encontrado.');
+        }
+      } catch (error) {
+        console.error("Erro ao buscar CEP", error);
+        alert('Erro ao buscar CEP.');
+      } finally {
+        setLoadingCep(false);
+      }
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB");
+      const reader = new FileReader();
+      reader.onloadend = () => setFormData({ ...formData, logoUrl: reader.result as string });
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!formData.name || !formData.cnpj || !formData.email) return alert('Preencha os campos obrigatórios (*)');
+
+    // Password validation
+    if (!company && !formData.password) return alert('Defina uma senha de acesso para a empresa');
+    if (formData.password && formData.password !== formData.confirmPassword) return alert('As senhas não conferem');
+
+    // Build the full address string from components if CEP was used, otherwise fallback to existing address field
+    let fullAddress = formData.address;
+    if (formData.cep && formData.street && formData.number) {
+      fullAddress = `${formData.street}, ${formData.number} - ${formData.neighborhood} - ${formData.city} - ${formData.state} | CEP ${formData.cep}`;
+      if (formData.complement) fullAddress += ` | Complemento: ${formData.complement}`;
+    }
+
+    onSave({
+      ...formData,
+      address: fullAddress,
+      id: company?.id
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-800">{company ? 'Editar Empresa' : 'Nova Empresa'}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Logo */}
+          <div className="flex justify-center mb-4">
+            <div className="relative group cursor-pointer w-32 h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center bg-gray-50 hover:border-orange-500 transition-colors overflow-hidden">
+              {formData.logoUrl ? (
+                <img src={formData.logoUrl} className="w-full h-full object-contain p-2" />
+              ) : (
+                <>
+                  <ImageIcon className="text-gray-400 mb-2" />
+                  <span className="text-xs text-gray-500">Upload Logo</span>
+                </>
+              )}
+              <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={handleLogoUpload} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa *</label>
+              <Input value={formData.name} onChange={(e: any) => setFormData({ ...formData, name: e.target.value })} placeholder="Razão Social" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ *</label>
+              <Input value={formData.cnpj} onChange={(e: any) => setFormData({ ...formData, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+              <Input value={formData.phone} onChange={(e: any) => setFormData({ ...formData, phone: e.target.value })} placeholder="(00) 0000-0000" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">E-mail Corporativo *</label>
+            <Input value={formData.email} onChange={(e: any) => setFormData({ ...formData, email: e.target.value })} placeholder="financeiro@empresa.com" />
+          </div>
+
+          {/* Detailed Address Section */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+            <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2"><MapPin size={16} /> Endereço</h4>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-1">
+                <label className="block text-xs font-medium text-gray-500 mb-1">CEP</label>
+                <div className="relative">
+                  <Input
+                    value={formData.cep}
+                    onChange={(e: any) => setFormData({ ...formData, cep: e.target.value })}
+                    onBlur={handleCepBlur}
+                    placeholder="00000-000"
+                  />
+                  {loadingCep && <div className="absolute right-3 top-2.5"><Loader2 size={16} className="animate-spin text-orange-500" /></div>}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Rua / Logradouro</label>
+                <Input value={formData.street} onChange={(e: any) => setFormData({ ...formData, street: e.target.value })} placeholder="Av. Paulista, etc." />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-1">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Número</label>
+                <Input value={formData.number} onChange={(e: any) => setFormData({ ...formData, number: e.target.value })} placeholder="123" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Bairro</label>
+                <Input value={formData.neighborhood} onChange={(e: any) => setFormData({ ...formData, neighborhood: e.target.value })} placeholder="Centro" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Cidade</label>
+                <Input value={formData.city} onChange={(e: any) => setFormData({ ...formData, city: e.target.value })} placeholder="São Paulo" />
+              </div>
+              <div className="col-span-1">
+                <label className="block text-xs font-medium text-gray-500 mb-1">UF</label>
+                <Input value={formData.state} onChange={(e: any) => setFormData({ ...formData, state: e.target.value })} placeholder="SP" maxLength={2} />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Complemento (Opcional)</label>
+              <Input value={formData.complement} onChange={(e: any) => setFormData({ ...formData, complement: e.target.value })} placeholder="Apto 101, Sala 5, etc." />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Limite de Crédito Mensal (R$)</label>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                value={formData.creditLimit}
+                onChange={(e: any) => setFormData({ ...formData, creditLimit: parseFloat(e.target.value) || 0 })}
+                className="font-bold text-lg text-green-700"
+              />
+            </div>
+            <div className="flex gap-2 mt-2">
+              {[1000, 2000, 5000, 10000].map(val => (
+                <button
+                  key={val}
+                  onClick={() => setFormData({ ...formData, creditLimit: val })}
+                  className={`px-3 py-1 text-xs rounded-full border transition ${formData.creditLimit === val ? 'bg-green-100 border-green-500 text-green-700 font-bold' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                >
+                  R$ {val}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+            <h4 className="font-bold text-orange-800 mb-3 flex items-center gap-2">
+              <Shield size={16} /> Credenciais de Acesso
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{company ? 'Nova Senha (Opcional)' : 'Senha de Acesso *'}</label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e: any) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder={company ? "Manter atual" : "********"}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha</label>
+                <Input
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={(e: any) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  placeholder={company ? "Manter atual" : "********"}
+                />
+              </div>
+            </div>
+            {!company && <p className="text-xs text-orange-600 mt-2">A empresa receberá um e-mail de confirmação, mas a senha definida aqui já permite acesso imediato.</p>}
+          </div>
+
+          <div className="pt-4 flex gap-3">
+            <Button variant="outline" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button onClick={handleSubmit} className="flex-1">Salvar Alterações</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: APP_CONFIG.googleMapsApiKey,
@@ -497,15 +748,41 @@ export const AdminDashboard = () => {
   // Companies Tab State
   const [companies, setCompanies] = useState<any[]>([]); // Mock list of companies
   const [showCompanyList, setShowCompanyList] = useState(false);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<any>(null);
+  const [viewingCompanyId, setViewingCompanyId] = useState<string | null>(null);
+
+  const handleSaveCompany = async (data: any) => {
+    try {
+      if (editingCompany) {
+        // Update local list optimistically
+        setCompanies(companies.map(c => c.id === data.id ? data : c));
+        // Save to storage
+        await saveCompany(data);
+        alert('Empresa atualizada com sucesso!');
+      } else {
+        const newCompany = { ...data, id: String(Date.now()), usedCredit: 0, status: 'active' };
+        // Update local list
+        setCompanies([...companies, newCompany]);
+        // Save to storage
+        await saveCompany(newCompany);
+        alert(`Empresa ${data.name} cadastrada com sucesso! Senha de acesso definida.`);
+      }
+      setShowCompanyModal(false);
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao salvar empresa.');
+    }
+  };
 
   useEffect(() => {
-    // Mock load companies
+    // Load companies from shared service
     if (activeTab === 'companies') {
-      // In real app, fetch from API
-      setCompanies([
-        { id: '1', name: 'Tech Solutions Ltd', cnpj: '12.345.678/0001-90', email: 'contato@techsolutions.com', creditLimit: 5000, usedCredit: 1200 },
-        { id: '2', name: 'Logística Express', cnpj: '98.765.432/0001-10', email: 'admin@logexpress.com.br', creditLimit: 10000, usedCredit: 8500 },
-      ]);
+      const loadCompanies = async () => {
+        const data = await getAllCompanies();
+        setCompanies(data);
+      };
+      loadCompanies();
     }
   }, [activeTab]);
 
@@ -546,12 +823,48 @@ export const AdminDashboard = () => {
     { id: 'n12', type: 'ride_issue', title: 'Objeto perdido', message: 'Passageiro reportou celular esquecido na moto do piloto Roberto', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 45), read: true, rideId: 'JKL012', passenger: 'Amanda Lima', driver: 'Roberto Silva' },
     { id: 'n13', type: 'payment', title: 'Pagamento pendente resolvido', message: 'Transferência de R$ 520,00 para Carlos Oliveira processada', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60), read: true, amount: 520, driver: 'Carlos Oliveira' },
     { id: 'n14', type: 'ride_issue', title: 'Cancelamento excessivo', message: 'Piloto Marcos Santos com taxa alta de cancelamento (15%)', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90), read: true, driver: 'Marcos Santos' },
+    { id: 'n14', type: 'ride_issue', title: 'Cancelamento excessivo', message: 'Piloto Marcos Santos com taxa alta de cancelamento (15%)', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90), read: true, driver: 'Marcos Santos' },
     { id: 'n15', type: 'feedback', title: 'Avaliação baixa recebida', message: 'Piloto José Almeida recebeu avaliação 1.0 - segunda reclamação', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 120), read: true, rating: 1.0, driver: 'José Almeida' },
   ]);
 
+  // Subscribe to real tickets
+  const prevTicketsCountRef = React.useRef(0);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToTickets((tickets) => {
+      // Play sound if new tickets arrived (simple length check)
+      if (prevTicketsCountRef.current > 0 && tickets.length > prevTicketsCountRef.current) {
+        playSound('newRequest');
+      }
+      prevTicketsCountRef.current = tickets.length;
+
+      // Convert tickets to notification format
+      const ticketNotifications = tickets.map(ticket => ({
+        id: ticket.id,
+        type: ticket.type, // 'support_request' etc
+        title: ticket.title,
+        message: ticket.description,
+        time: new Date(ticket.createdAt),
+        read: ticket.read || ticket.status === 'resolved',
+        driver: ticket.userRole === 'driver' ? ticket.userName : undefined,
+        urgency: ticket.urgency,
+        status: ticket.status,
+        originalTicket: ticket // Keep ref
+      }));
+
+      // Merge with existing mock notifications (filtering out old duplicates if any, though IDs match ticket_xxx)
+      // For this demo, we append real tickets to the hardcoded ones
+      setNotifications(prev => {
+        const hardcoded = prev.filter(n => !n.id.startsWith('ticket_'));
+        return [...ticketNotifications, ...hardcoded].sort((a, b) => b.time.getTime() - a.time.getTime());
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Occurrences filter state
   const [occurrenceSearch, setOccurrenceSearch] = useState('');
-  const [occurrenceTypeFilter, setOccurrenceTypeFilter] = useState<'all' | 'ride_issue' | 'payment' | 'feedback'>('all');
+  const [occurrenceTypeFilter, setOccurrenceTypeFilter] = useState<'all' | 'ride_issue' | 'payment' | 'feedback' | 'support_request'>('all');
   const [occurrenceStatusFilter, setOccurrenceStatusFilter] = useState<'all' | 'pending' | 'resolved'>('all');
   const [occurrenceDateFrom, setOccurrenceDateFrom] = useState('');
   const [occurrenceDateTo, setOccurrenceDateTo] = useState('');
@@ -752,6 +1065,10 @@ export const AdminDashboard = () => {
 
   if (loading && !dashboardData) {
     return <div className="h-screen flex items-center justify-center bg-gray-50 text-orange-500"><Loader2 size={48} className="animate-spin" /></div>;
+  }
+
+  if (viewingCompanyId) {
+    return <CompanyDashboard companyId={viewingCompanyId} onBack={() => setViewingCompanyId(null)} />;
   }
 
   // Fallback se não houver dados
@@ -1552,9 +1869,17 @@ export const AdminDashboard = () => {
       {/* Sidebar */}
       <div className="w-64 bg-gray-900 text-white flex flex-col shadow-2xl z-20 hidden md:flex">
         <div className="p-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <span className="text-orange-500">Moto</span>Já
-          </h1>
+          {settings.visual?.appLogoUrl ? (
+            <img
+              src={settings.visual.appLogoUrl}
+              alt={APP_CONFIG.name}
+              className="h-12 object-contain w-auto mb-2"
+            />
+          ) : (
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <span className="text-orange-500">Moto</span>Já
+            </h1>
+          )}
           <p className="text-gray-500 text-xs mt-1">Painel Administrativo v1.0</p>
         </div>
 
@@ -1578,7 +1903,7 @@ export const AdminDashboard = () => {
         <div className="p-4 border-t border-gray-800">
           <div
             className="flex items-center gap-3 cursor-pointer hover:bg-gray-800 p-2 rounded-lg transition"
-            onClick={() => window.location.reload()}
+            onClick={() => onLogout ? onLogout() : window.location.reload()}
           >
             <img src="https://ui-avatars.com/api/?background=random&color=fff&name=Admin" className="w-8 h-8 rounded-full" alt="Admin" />
             <div className="flex-1">
@@ -1615,7 +1940,7 @@ export const AdminDashboard = () => {
                     <h2 className="text-2xl font-bold text-gray-800">Gestão de Empresas Parceiras</h2>
                     <p className="text-gray-500">Gerencie clientes corporativos e limites de crédito.</p>
                   </div>
-                  <Button><Plus size={20} /> Nova Empresa</Button>
+                  <Button onClick={() => { setEditingCompany(null); setShowCompanyModal(true); }}><Plus size={20} /> Nova Empresa</Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1649,8 +1974,8 @@ export const AdminDashboard = () => {
                       </div>
 
                       <div className="flex gap-3">
-                        <Button fullWidth variant="outline" onClick={() => alert('Edição em breve')}>Editar</Button>
-                        <Button fullWidth onClick={() => alert(`Acesso ao painel da ${company.name} simulado. Para ver o painel real, acesse como Empresa na tela inicial.`)}>Ver Painel</Button>
+                        <Button fullWidth variant="outline" onClick={() => { setEditingCompany(company); setShowCompanyModal(true); }}>Editar</Button>
+                        <Button fullWidth onClick={() => setViewingCompanyId(company.id)}>Ver Painel</Button>
                       </div>
                     </div>
                   ))}
@@ -2210,7 +2535,7 @@ export const AdminDashboard = () => {
               </div>
 
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="p-4 border-l-4 border-red-500">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -2244,6 +2569,17 @@ export const AdminDashboard = () => {
                     </div>
                   </div>
                 </Card>
+                <Card className="p-4 border-l-4 border-blue-500">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <LifeBuoy size={20} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'support_request' && !n.read).length}</p>
+                      <p className="text-xs text-gray-500">Solicitações de Suporte</p>
+                    </div>
+                  </div>
+                </Card>
               </div>
 
               {/* Filters */}
@@ -2273,6 +2609,7 @@ export const AdminDashboard = () => {
                       <option value="ride_issue">Problemas em Corridas</option>
                       <option value="payment">Pagamentos</option>
                       <option value="feedback">Avaliações</option>
+                      <option value="support_request">Suporte (Pilotos)</option>
                     </select>
                   </div>
                   <div>
@@ -2321,7 +2658,7 @@ export const AdminDashboard = () => {
                     Lista de Ocorrências
                     <span className="font-normal text-gray-500 text-sm ml-2">
                       ({notifications
-                        .filter(n => (n.type === 'ride_issue' || n.type === 'payment' || n.type === 'feedback'))
+                        .filter(n => (n.type === 'ride_issue' || n.type === 'payment' || n.type === 'feedback' || n.type === 'support_request'))
                         .filter(n => occurrenceTypeFilter === 'all' || n.type === occurrenceTypeFilter)
                         .filter(n => occurrenceStatusFilter === 'all' || (occurrenceStatusFilter === 'pending' ? !n.read : n.read))
                         .filter(n => !occurrenceSearch || n.title.toLowerCase().includes(occurrenceSearch.toLowerCase()) || n.message.toLowerCase().includes(occurrenceSearch.toLowerCase()) || (n as any).driver?.toLowerCase().includes(occurrenceSearch.toLowerCase()))
@@ -2339,7 +2676,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
                   {notifications
-                    .filter(n => n.type === 'ride_issue' || n.type === 'payment' || n.type === 'feedback')
+                    .filter(n => n.type === 'ride_issue' || n.type === 'payment' || n.type === 'feedback' || n.type === 'support_request')
                     .filter(n => occurrenceTypeFilter === 'all' || n.type === occurrenceTypeFilter)
                     .filter(n => occurrenceStatusFilter === 'all' || (occurrenceStatusFilter === 'pending' ? !n.read : n.read))
                     .filter(n => !occurrenceSearch || n.title.toLowerCase().includes(occurrenceSearch.toLowerCase()) || n.message.toLowerCase().includes(occurrenceSearch.toLowerCase()) || (n as any).driver?.toLowerCase().includes(occurrenceSearch.toLowerCase()))
@@ -2354,11 +2691,13 @@ export const AdminDashboard = () => {
                         <div className="flex gap-4">
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${occurrence.type === 'ride_issue' ? 'bg-red-100 text-red-600' :
                             occurrence.type === 'payment' ? 'bg-green-100 text-green-600' :
-                              'bg-yellow-100 text-yellow-600'
+                              occurrence.type === 'support_request' ? 'bg-blue-100 text-blue-600' :
+                                'bg-yellow-100 text-yellow-600'
                             }`}>
                             {occurrence.type === 'ride_issue' && <AlertTriangle size={24} />}
                             {occurrence.type === 'payment' && <DollarSign size={24} />}
                             {occurrence.type === 'feedback' && <Star size={24} />}
+                            {occurrence.type === 'support_request' && <LifeBuoy size={24} />}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-start justify-between gap-4">
@@ -2374,6 +2713,31 @@ export const AdminDashboard = () => {
                                   )}
                                 </div>
                                 <p className="text-sm text-gray-600 mb-2">{occurrence.message}</p>
+
+                                {/* Support Ticket Extra Context */}
+                                {(occurrence as any).originalTicket?.rideDetails && (
+                                  <div className="mb-2 p-2 bg-gray-50 rounded border border-gray-100 text-xs">
+                                    <p className="font-bold text-gray-700 flex items-center gap-1">
+                                      <History size={12} /> Contexto da Corrida
+                                    </p>
+                                    <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-1">
+                                      <span className="text-gray-500">Destino:</span> <span className="font-medium text-gray-800 truncate">{(occurrence as any).originalTicket.rideDetails.destination}</span>
+                                      <span className="text-gray-500">Data:</span> <span className="font-medium text-gray-800">{new Date((occurrence as any).originalTicket.rideDetails.date).toLocaleDateString('pt-BR')}</span>
+                                      <span className="text-gray-500">Valor:</span> <span className="font-medium text-green-600">R$ {(occurrence as any).originalTicket.rideDetails.price.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(occurrence as any).originalTicket?.attachments && (occurrence as any).originalTicket.attachments.length > 0 && (
+                                  <div className="mb-2 flex gap-2">
+                                    {(occurrence as any).originalTicket.attachments.map((url: string, idx: number) => (
+                                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block w-12 h-12 rounded overflow-hidden border border-gray-200 hover:opacity-80 transition">
+                                        <img src={url} alt="Anexo" className="w-full h-full object-cover" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+
                                 <p className="text-xs text-gray-400">
                                   {occurrence.time.toLocaleDateString('pt-BR')} às {occurrence.time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
@@ -3063,6 +3427,274 @@ export const AdminDashboard = () => {
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">
+                {/* Visual Customization */}
+                <Card className="p-6 md:col-span-2 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                    <div className="bg-purple-100 p-2 rounded-lg">
+                      <Palette className="text-purple-600" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Personalização Visual</h3>
+                      <p className="text-sm text-gray-500">Personalize a identidade visual e tela de login do painel administrativo.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-8">
+                    {/* App Logo */}
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">Logo da Aplicação</label>
+                      <div className="relative h-32 w-full rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-orange-500 transition-colors cursor-pointer flex items-center justify-center shadow-sm">
+                        {settings.visual?.appLogoUrl ? (
+                          <img src={settings.visual.appLogoUrl} className="h-full object-contain p-2" alt="App Logo" />
+                        ) : (
+                          <div className="text-center text-gray-400">
+                            <ImageIcon size={24} className="mx-auto mb-1 opacity-50" />
+                            <span className="text-xs">Sem logo</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                          <span className="text-xs font-bold">Alterar Logo</span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 1024 * 1024) { alert("O logo deve ter no máximo 1MB."); return; }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSettings({
+                                  ...settings,
+                                  visual: {
+                                    ...(settings.visual || { loginBackgroundImage: '', primaryColor: '' }),
+                                    appLogoUrl: reader.result as string
+                                  }
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400">Usado no topo do login e menu lateral.</p>
+                    </div>
+
+                    {/* Login Background */}
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">Imagem de Fundo do Login</label>
+                      <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-orange-500 transition-colors cursor-pointer shadow-inner">
+                        {settings.visual?.loginBackgroundImage ? (
+                          <div className="relative w-full h-full group">
+                            <img src={settings.visual.loginBackgroundImage} className="w-full h-full object-cover" alt="Login Background" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Remover imagem de fundo do login?')) {
+                                  setSettings({
+                                    ...settings,
+                                    visual: { ...(settings.visual || {}), loginBackgroundImage: '' }
+                                  });
+                                }
+                              }}
+                              className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                              title="Remover Imagem"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                            <div className="text-center">
+                              <ImageIcon size={32} className="mx-auto mb-2 opacity-50" />
+                              <span className="text-xs">Sem imagem selecionada</span>
+                            </div>
+                          </div>
+                        )}
+                        {!settings.visual?.loginBackgroundImage && (
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                            <ImageIcon size={32} className="mb-2" />
+                            <span className="text-sm font-bold">Clique para alterar imagem</span>
+                            <span className="text-xs opacity-75 mt-1">Trocar Plano de Fundo</span>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 3 * 1024 * 1024) {
+                                alert("A imagem deve ter no máximo 3MB.");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSettings({
+                                  ...settings,
+                                  visual: {
+                                    ...(settings.visual || { appLogoUrl: '', primaryColor: '' }),
+                                    loginBackgroundImage: reader.result as string
+                                  }
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span>Recomendado: 1920x1080px (JPG/PNG)</span>
+                        {settings.visual?.loginBackgroundImage?.startsWith('data:') && (
+                          <span className="text-orange-600 font-bold">Nova imagem selecionada (não salva)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mobile Background */}
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">Imagem de Fundo (Mobile)</label>
+                      <div className="relative aspect-[9/16] w-1/2 mx-auto rounded-xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-orange-500 transition-colors cursor-pointer shadow-inner">
+                        {settings.visual?.mobileBackgroundImage ? (
+                          <div className="relative w-full h-full group">
+                            <img src={settings.visual.mobileBackgroundImage} className="w-full h-full object-cover" alt="Mobile Background" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Remover imagem de fundo mobile?')) {
+                                  setSettings({
+                                    ...settings,
+                                    visual: { ...(settings.visual as any), mobileBackgroundImage: '' }
+                                  });
+                                }
+                              }}
+                              className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                              title="Remover Imagem"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                            <div className="text-center">
+                              <Smartphone size={32} className="mx-auto mb-2 opacity-50" />
+                              <span className="text-xs">Sem imagem mobile</span>
+                            </div>
+                          </div>
+                        )}
+                        {!settings.visual?.mobileBackgroundImage && (
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                            <Smartphone size={32} className="mb-2" />
+                            <span className="text-sm font-bold">Alterar Fundo Mobile</span>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 2 * 1024 * 1024) { alert("A imagem deve ter no máximo 2MB."); return; }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSettings({
+                                  ...settings,
+                                  visual: {
+                                    ...(settings.visual as any),
+                                    mobileBackgroundImage: reader.result as string
+                                  }
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="text-center text-xs text-gray-500">
+                        <span>Recomendado: 1080x1920px (Vertical)</span>
+                      </div>
+                    </div>
+
+                    {/* Login Messages */}
+                    <div className="space-y-4 md:col-span-2 border-t border-gray-100 pt-6">
+                      <label className="block text-sm font-medium text-gray-700 uppercase tracking-wider mb-2">Mensagens de Boas-vindas</label>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Título Principal</label>
+                          <Input
+                            value={settings.visual?.loginTitle || 'MotoJá'}
+                            onChange={(e) => setSettings({
+                              ...settings,
+                              visual: { ...(settings.visual as any), loginTitle: e.target.value }
+                            })}
+                            placeholder="Ex: MotoJá"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Subtítulo / Slogan</label>
+                          <Input
+                            value={settings.visual?.loginSubtitle || 'Gestão completa da plataforma.'}
+                            onChange={(e) => setSettings({
+                              ...settings,
+                              visual: { ...(settings.visual as any), loginSubtitle: e.target.value }
+                            })}
+                            placeholder="Ex: Gestão completa..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Primary Color & Preview */}
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Cor de Destaque (Branding)</label>
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer hover:scale-105 transition-transform">
+                            <input
+                              type="color"
+                              value={settings.visual?.primaryColor || '#f97316'}
+                              onChange={(e) => setSettings({
+                                ...settings,
+                                visual: {
+                                  ...(settings.visual || { appLogoUrl: '', loginBackgroundImage: '' }),
+                                  primaryColor: e.target.value
+                                }
+                              })}
+                              className="absolute inset-[-50%] w-[200%] h-[200%] cursor-pointer p-0 m-0 border-0"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <Input
+                              value={settings.visual?.primaryColor || '#f97316'}
+                              onChange={(e) => setSettings({
+                                ...settings,
+                                visual: {
+                                  ...(settings.visual || { appLogoUrl: '', loginBackgroundImage: '' }),
+                                  primaryColor: e.target.value
+                                }
+                              })}
+                              placeholder="#000000"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2">Esta cor será utilizada em botões e destaques na tela de login do administrador.</p>
+                      </div>
+
+                      <div className="bg-gray-100 p-4 rounded-lg border border-gray-200">
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Pré-visualização do Botão</p>
+                        <button
+                          className="px-4 py-2 rounded-lg text-white font-bold shadow-lg transition-transform hover:scale-105"
+                          style={{ backgroundColor: settings.visual?.primaryColor || '#f97316' }}
+                        >
+                          Entrar no Painel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
                 {/* Moto Pricing */}
                 <Card className="p-6">
                   <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
@@ -3213,7 +3845,7 @@ export const AdminDashboard = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                           <Input
                             value={settings.companyPhone}
-                            onChange={(e) => setSettingsState({ ...settings, companyPhone: e.target.value })}
+                            onChange={(e) => setSettings({ ...settings, companyPhone: e.target.value })}
                             placeholder="(00) 0000-0000"
                           />
                         </div>
@@ -3224,7 +3856,7 @@ export const AdminDashboard = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Completo</label>
                         <AddressInput
                           value={settings.companyAddress}
-                          onChange={(val) => setSettingsState({ ...settings, companyAddress: val })}
+                          onChange={(val) => setSettings({ ...settings, companyAddress: val })}
                           placeholder="Rua, Número, Bairro"
                         />
                       </div>
@@ -3515,6 +4147,8 @@ export const AdminDashboard = () => {
           )}
         </div>
       </div >
+
+      {showCompanyModal && <CompanyFormModal company={editingCompany} onClose={() => setShowCompanyModal(false)} onSave={handleSaveCompany} />}
       {viewDriver && <DriverDetailModal driver={viewDriver} onClose={() => setViewDriver(null)} />}
       {viewUser && <UserDetailModal user={viewUser} rides={safeData.recentRides} onClose={() => setViewUser(null)} />}
       {showAddDriver && <AddDriverModal onClose={() => setShowAddDriver(false)} />}

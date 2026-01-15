@@ -20,11 +20,16 @@ export interface Company {
   name: string;
   cnpj: string;
   email: string;
-  status: 'active' | 'blocked';
+  status: 'active' | 'blocked' | 'pending';
   address?: string;
   logoUrl?: string;
   creditLimit?: number;
   usedCredit?: number;
+  financialManager?: string;
+  financialManagerPhone?: string;
+  phone?: string;
+  contractUrl?: string;
+  ownerUid?: string;
 }
 
 export interface User {

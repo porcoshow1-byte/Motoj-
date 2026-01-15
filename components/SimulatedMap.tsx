@@ -157,12 +157,16 @@ const InternalMap: React.FC<MapProps> = ({ showDriver, showRoute, status, origin
         map.panTo(defaultCenter);
         map.setZoom(13);
       }
+    } else if (showDriver && driverLocation) {
+      // Driver Mode: Follow Driver
+      map.panTo(driverLocation);
+      map.setZoom(16);
     } else if (origin && !destination && !showRoute) {
       // Modo Acompanhar Usuário (Home)
       map.panTo(origin);
       map.setZoom(15);
     }
-  }, [map, origin, destination, showRoute, drivers]);
+  }, [map, origin, destination, showRoute, drivers, driverLocation, showDriver]);
 
   return (
     <div className="relative w-full h-full animate-fade-in">
