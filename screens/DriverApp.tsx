@@ -833,6 +833,10 @@ export const DriverApp = () => {
                       )}
                     </div>
                   </div>
+
+                  <Button fullWidth onClick={handleSubmitSupport} className="bg-blue-600 hover:bg-blue-700 mt-2">
+                    <Send size={18} className="mr-2" /> Enviar Solicitação
+                  </Button>
                 </div>
               )}
             </div>
