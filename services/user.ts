@@ -138,3 +138,69 @@ export const updateUserProfile = async (uid: string, data: Partial<User | Driver
   const userRef = doc(db, USERS_COLLECTION, uid);
   await updateDoc(userRef, data);
 };
+
+// ============ SESSION CONTROL (Single Device Login) ============
+
+// Generate unique session ID
+const generateSessionId = () => {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+};
+
+// Get current session ID from localStorage
+export const getLocalSessionId = () => {
+  return localStorage.getItem('motoja_session_id');
+};
+
+// Set session ID locally
+const setLocalSessionId = (sessionId: string) => {
+  localStorage.setItem('motoja_session_id', sessionId);
+};
+
+// Register new session (called on login)
+export const registerSession = async (uid: string): Promise<string> => {
+  const sessionId = generateSessionId();
+  setLocalSessionId(sessionId);
+
+  if (isMockMode || !db) {
+    const storageKey = `motoja_user_${uid}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      localStorage.setItem(storageKey, JSON.stringify({ ...parsed, activeSessionId: sessionId }));
+    }
+    return sessionId;
+  }
+
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await updateDoc(userRef, { activeSessionId: sessionId });
+  return sessionId;
+};
+
+// Validate session (check if current session is still active)
+export const validateSession = async (uid: string): Promise<boolean> => {
+  const localSessionId = getLocalSessionId();
+  if (!localSessionId) return false;
+
+  if (isMockMode || !db) {
+    const storageKey = `motoja_user_${uid}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.activeSessionId === localSessionId;
+    }
+    return false;
+  }
+
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    return data.activeSessionId === localSessionId;
+  }
+  return false;
+};
+
+// Clear session (called on logout)
+export const clearSession = () => {
+  localStorage.removeItem('motoja_session_id');
+};

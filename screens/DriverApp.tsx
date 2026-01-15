@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { subscribeToPendingRides, acceptRide, startRide, completeRide, getRideHistory, subscribeToRide, updateDriverLocation } from '../services/ride';
 import { createSupportTicket } from '../services/support';
 import { logout } from '../services/auth';
-import { getOrCreateUserProfile, updateUserProfile } from '../services/user';
+import { getOrCreateUserProfile, updateUserProfile, registerSession, validateSession, clearSession } from '../services/user';
 import { RideRequest, Driver, Coords } from '../types';
 import { playSound, initAudio } from '../services/audio';
 import { useGeoLocation } from '../hooks/useGeoLocation';
@@ -22,6 +22,8 @@ export const DriverApp = () => {
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const [isOnline, setIsOnline] = useState(false);
+  const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
+  const [sessionKicked, setSessionKicked] = useState(false);
   const [incomingRides, setIncomingRides] = useState<RideRequest[]>([]);
   const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
   const [earnings, setEarnings] = useState(0);
@@ -75,6 +77,35 @@ export const DriverApp = () => {
   useEffect(() => {
     loadDriverProfile();
   }, [authUser]);
+
+  // Warn user before leaving while online
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOnline) {
+        e.preventDefault();
+        e.returnValue = 'Você está online! Deseja realmente sair?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOnline]);
+
+  // Session validation - check every 10 seconds if still valid
+  useEffect(() => {
+    if (!currentDriver || !isOnline) return;
+
+    const checkSession = async () => {
+      const isValid = await validateSession(currentDriver.id);
+      if (!isValid) {
+        setIsOnline(false);
+        setSessionKicked(true);
+      }
+    };
+
+    const interval = setInterval(checkSession, 10000);
+    return () => clearInterval(interval);
+  }, [currentDriver, isOnline]);
 
   // Subscribe to pending rides when online and no active ride
   useEffect(() => {
@@ -173,26 +204,52 @@ export const DriverApp = () => {
 
   }, [activeRide?.id, currentDriverLocation]);
 
-  const toggleOnline = async () => {
-    if (!currentDriver) return;
-    const newStatus = !isOnline;
-
-    if (newStatus) {
-      initAudio(); // Inicializa áudio na primeira interação
-      ensureNotificationPermission(); // Solicita permissão de notificação
+  // Handler for clicking the online/offline button
+  const handleToggleOnlineClick = () => {
+    if (isOnline) {
+      // Show confirmation before going offline
+      setShowOfflineConfirm(true);
+    } else {
+      // Going online - no confirmation needed
+      goOnline();
     }
+  };
 
-    setIsOnline(newStatus);
+  const goOnline = async () => {
+    if (!currentDriver) return;
+    initAudio();
+    ensureNotificationPermission();
+    setIsOnline(true);
 
-    // Sync status to database so Admin can see
+    // Register session and sync to database
     try {
+      await registerSession(currentDriver.id);
       await updateUserProfile(currentDriver.id, {
-        status: newStatus ? 'online' : 'offline',
+        status: 'online',
         location: currentDriverLocation || undefined
       });
     } catch (error) {
-      console.error("Erro ao atualizar status:", error);
+      console.error("Erro ao ficar online:", error);
     }
+  };
+
+  const confirmGoOffline = async () => {
+    if (!currentDriver) return;
+    setShowOfflineConfirm(false);
+    setIsOnline(false);
+
+    try {
+      await updateUserProfile(currentDriver.id, {
+        status: 'offline'
+      });
+    } catch (error) {
+      console.error("Erro ao ficar offline:", error);
+    }
+  };
+
+  // Legacy function kept for compatibility
+  const toggleOnline = async () => {
+    handleToggleOnlineClick();
   };
 
   // Função para rejeitar com animação de saída (descendo)
@@ -791,7 +848,63 @@ export const DriverApp = () => {
           </div>
         </div>
       )}
+      {/* Offline Confirmation Modal */}
+      {showOfflineConfirm && (
+        <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-700 animate-slide-up">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Power size={32} className="text-orange-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Deseja ficar offline?</h3>
+              <p className="text-gray-400 text-sm mb-6">
+                Você não receberá mais chamadas de corrida enquanto estiver offline.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  fullWidth
+                  variant="outline"
+                  onClick={() => setShowOfflineConfirm(false)}
+                  className="border-gray-600 text-gray-300"
+                >
+                  Não, continuar online
+                </Button>
+                <Button
+                  fullWidth
+                  onClick={confirmGoOffline}
+                  className="bg-red-500 hover:bg-red-600"
+                >
+                  Sim, ficar offline
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Session Kicked Modal */}
+      {sessionKicked && (
+        <div className="absolute inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-red-500 animate-slide-up">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle size={32} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Sessão Encerrada</h3>
+              <p className="text-gray-400 text-sm mb-6">
+                Sua conta foi acessada em outro dispositivo. Apenas um dispositivo pode estar conectado por vez.
+              </p>
+              <Button
+                fullWidth
+                onClick={() => { clearSession(); logout(); }}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
