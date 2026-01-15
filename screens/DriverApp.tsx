@@ -484,11 +484,11 @@ export const DriverApp = () => {
       {/* Main Content Area */}
       <div className="flex-1 relative overflow-hidden">
         {!isOnline ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-8 bg-gray-900 z-10">
-            <div className="bg-gray-800 p-8 rounded-full mb-8 shadow-2xl border-4 border-gray-700">
-              <Power size={64} className="text-gray-500" />
+          <div className={`absolute inset-0 flex flex-col items-center justify-center p-8 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'} z-10`}>
+            <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-200 border-gray-300'} p-8 rounded-full mb-8 shadow-2xl border-4`}>
+              <Power size={64} className={`${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Você está offline</h2>
+            <h2 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Você está offline</h2>
             <Button onClick={toggleOnline} className="w-full max-w-xs text-lg py-4 bg-green-500 hover:bg-green-600 shadow-green-900/50">
               Ficar Online
             </Button>
@@ -863,7 +863,7 @@ export const DriverApp = () => {
                   fullWidth
                   variant="outline"
                   onClick={() => setShowOfflineConfirm(false)}
-                  className="border-gray-600 text-gray-300"
+                  className="border-gray-500 text-white bg-gray-700 hover:bg-gray-600"
                 >
                   Não
                 </Button>
