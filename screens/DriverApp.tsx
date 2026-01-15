@@ -867,14 +867,14 @@ export const DriverApp = () => {
                   onClick={() => setShowOfflineConfirm(false)}
                   className="border-gray-600 text-gray-300"
                 >
-                  Não, continuar online
+                  Não
                 </Button>
                 <Button
                   fullWidth
                   onClick={confirmGoOffline}
                   className="bg-red-500 hover:bg-red-600"
                 >
-                  Sim, ficar offline
+                  Sim
                 </Button>
               </div>
             </div>
