@@ -474,7 +474,7 @@ export const DriverApp = () => {
           </button>
           <button
             onClick={() => setShowHistory(true)}
-            className={`${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} px-3 py-1.5 rounded-lg border flex items-center gap-2 hover:opacity-80 transition`}
+            className={`${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} px-3 py-1.5 rounded-lg border flex items-center gap-2 hover:opacity-80 transition whitespace-nowrap`}
           >
             <DollarSign size={14} className="text-green-500" />
             <span className="font-bold text-green-500">{APP_CONFIG.currency} {earnings.toFixed(2)}</span>
@@ -665,7 +665,7 @@ export const DriverApp = () => {
           </div>
           <div className="p-4 flex-1 overflow-y-auto space-y-3">
             <div className="bg-gray-800 p-6 rounded-2xl mb-6 text-center border border-gray-700">
-              <p className="text-gray-400 text-sm mb-1">Ganhos Totais (Simulado)</p>
+              <p className="text-gray-400 text-sm mb-1">Ganhos Totais</p>
               <h3 className="text-4xl font-bold text-green-400">R$ {earnings.toFixed(2)}</h3>
             </div>
             {historyRides.length === 0 ? <p className="text-gray-500 text-center py-10">Nenhuma corrida finalizada ainda.</p> : historyRides.map((ride) => <div key={ride.id} className="bg-gray-800 p-4 rounded-xl border border-gray-700 flex justify-between items-center"><div><p className="font-bold text-white">{ride.destination}</p></div><div className="text-right"><p className="font-bold text-green-400">+ R$ {ride.price.toFixed(2)}</p></div></div>)}
