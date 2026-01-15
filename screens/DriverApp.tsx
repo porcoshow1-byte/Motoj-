@@ -432,9 +432,9 @@ export const DriverApp = () => {
   return (
     <div className={`h-full ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'} flex flex-col transition-colors duration-300`}>
       {/* Header */}
-      <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-4 flex justify-between items-center shadow-lg z-20 border-b transition-colors`}>
-        <div className="flex items-center gap-3 cursor-pointer p-1 rounded-lg hover:bg-black/10 transition" onClick={() => setShowPerformance(true)}>
-          <img src={currentDriver.avatar} className="w-10 h-10 rounded-full border border-gray-600" alt="Avatar" />
+      <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-3 flex justify-between items-center shadow-lg z-20 border-b transition-colors`}>
+        <div className="flex items-center gap-2 cursor-pointer p-1 rounded-lg hover:bg-black/10 transition" onClick={() => setShowPerformance(true)}>
+          <img src={currentDriver.avatar} className="w-9 h-9 rounded-full border border-gray-600" alt="Avatar" />
           <div>
             <h3 className={`font-bold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{currentDriver.name}</h3>
             <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -444,8 +444,8 @@ export const DriverApp = () => {
               {/* GPS Status Dot */}
               <span
                 className={`w-2 h-2 rounded-full ${gpsError ? 'bg-red-500' :
-                    gpsAccuracy ? (gpsAccuracy < 30 ? 'bg-green-500' : 'bg-orange-500') :
-                      'bg-gray-400 animate-pulse'
+                  gpsAccuracy ? (gpsAccuracy < 30 ? 'bg-green-500' : 'bg-orange-500') :
+                    'bg-gray-400 animate-pulse'
                   }`}
                 title={gpsError ? 'GPS Offline' : gpsAccuracy ? (gpsAccuracy < 30 ? 'GPS OK' : 'GPS Instável') : 'Localizando...'}
               />
