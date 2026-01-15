@@ -109,7 +109,9 @@ export const getOrCreateUserProfile = async (
         plate: initialData?.plate || 'AAA-0000',
         status: 'offline',
         location: { lat: 0, lng: 0 },
-        earningsToday: 0
+        location: { lat: 0, lng: 0 },
+        earningsToday: 0,
+        verificationStatus: 'pending'
       };
     }
 

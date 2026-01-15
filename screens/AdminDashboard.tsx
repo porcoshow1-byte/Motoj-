@@ -13,12 +13,14 @@ import { fetchDashboardData, DashboardData } from '../services/admin';
 import { updateUserProfile } from '../services/user';
 import { getAllCompanies, saveCompany } from '../services/company';
 import { subscribeToTickets, SupportTicket } from '../services/support';
+import { db } from '../services/firebase';
 import { playSound } from '../services/audio';
 import { CompanyDashboard } from './CompanyDashboard';
 import { SimulatedMap } from '../components/SimulatedMap';
 import { Driver, RideRequest, User } from '../types';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { APP_CONFIG } from '../constants';
+import { collection, getDocs, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { getSettings, saveSettings, SystemSettings } from '../services/settings';
 import { sendEmail, testSMTPConnection } from '../services/email';
 
@@ -805,28 +807,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
 
   // Notifications State
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([
-    // Recent
-    { id: 'n1', type: 'new_driver', title: 'Novo piloto aguardando aprovação', message: 'Lucas Mendes enviou documentos para verificação', time: new Date(Date.now() - 1000 * 60 * 5), read: false },
-    { id: 'n2', type: 'ride_issue', title: 'Corrida com problema reportado', message: 'Passageiro João Silva reportou problema na corrida #ABC123. Motorista não apareceu no local combinado.', time: new Date(Date.now() - 1000 * 60 * 15), read: false, rideId: 'ABC123', passenger: 'João Silva', driver: 'Carlos Oliveira' },
-    { id: 'n3', type: 'payment', title: 'Pagamento pendente', message: 'Transferência de R$ 250,00 para Carlos Oliveira pendente há 2 dias', time: new Date(Date.now() - 1000 * 60 * 30), read: false, amount: 250, driver: 'Carlos Oliveira' },
-    { id: 'n4', type: 'feedback', title: 'Avaliação baixa recebida', message: 'Piloto Marcos Santos recebeu avaliação 2.0 de um passageiro', time: new Date(Date.now() - 1000 * 60 * 60), read: true, rating: 2.0, driver: 'Marcos Santos' },
-    { id: 'n5', type: 'system', title: 'Atualização do sistema', message: 'Nova versão do app disponível para os usuários', time: new Date(Date.now() - 1000 * 60 * 120), read: true },
-    // Historical - Last week
-    { id: 'n6', type: 'ride_issue', title: 'Reclamação de cobrança', message: 'Passageira Maria Souza alega cobrança indevida na corrida #DEF456', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), read: true, rideId: 'DEF456', passenger: 'Maria Souza', driver: 'Roberto Silva' },
-    { id: 'n7', type: 'payment', title: 'Pagamento processado', message: 'Transferência de R$ 180,00 para Ana Pereira realizada', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), read: true, amount: 180, driver: 'Ana Pereira' },
-    { id: 'n8', type: 'feedback', title: 'Avaliação baixa recebida', message: 'Piloto José Almeida recebeu avaliação 1.5 - comportamento inadequado', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), read: true, rating: 1.5, driver: 'José Almeida' },
-    // Historical - Last month
-    { id: 'n9', type: 'ride_issue', title: 'Acidente reportado', message: 'Acidente leve durante corrida #GHI789. Ninguém ferido.', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15), read: true, rideId: 'GHI789', passenger: 'Pedro Santos', driver: 'Fernanda Lima' },
-    { id: 'n10', type: 'payment', title: 'Pagamento estornado', message: 'Estorno de R$ 35,00 para passageiro Carlos Mendes', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20), read: true, amount: 35, passenger: 'Carlos Mendes' },
-    { id: 'n11', type: 'feedback', title: 'Avaliação baixa recebida', message: 'Piloto Patrícia Costa recebeu avaliação 2.5 por atraso', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 25), read: true, rating: 2.5, driver: 'Patrícia Costa' },
-    // Historical - Older
-    { id: 'n12', type: 'ride_issue', title: 'Objeto perdido', message: 'Passageiro reportou celular esquecido na moto do piloto Roberto', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 45), read: true, rideId: 'JKL012', passenger: 'Amanda Lima', driver: 'Roberto Silva' },
-    { id: 'n13', type: 'payment', title: 'Pagamento pendente resolvido', message: 'Transferência de R$ 520,00 para Carlos Oliveira processada', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 60), read: true, amount: 520, driver: 'Carlos Oliveira' },
-    { id: 'n14', type: 'ride_issue', title: 'Cancelamento excessivo', message: 'Piloto Marcos Santos com taxa alta de cancelamento (15%)', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90), read: true, driver: 'Marcos Santos' },
-    { id: 'n14', type: 'ride_issue', title: 'Cancelamento excessivo', message: 'Piloto Marcos Santos com taxa alta de cancelamento (15%)', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90), read: true, driver: 'Marcos Santos' },
-    { id: 'n15', type: 'feedback', title: 'Avaliação baixa recebida', message: 'Piloto José Almeida recebeu avaliação 1.0 - segunda reclamação', time: new Date(Date.now() - 1000 * 60 * 60 * 24 * 120), read: true, rating: 1.0, driver: 'José Almeida' },
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Subscribe to real tickets
   const prevTicketsCountRef = React.useRef(0);
@@ -862,6 +843,50 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Listen for Pending Drivers (New Applications)
+  const knownDriversRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!db) return;
+
+    // Initial fetch to populate known drivers so we don't notify for existing ones immediately (optional, or notify for all pending)
+    // For now, we'll notify for any "added" event which happens on initial load for existing docs too
+    // To avoid spam on reload, we could check timestamp, but simple approach is fine for now
+
+    const q = query(collection(db, 'users'), where('role', '==', 'driver'), where('verificationStatus', '==', 'pending'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const driver = change.doc.data();
+          const id = change.doc.id;
+
+          // Avoid notifying if we already know this driver (locally) - optional
+          if (!knownDriversRef.current.has(id)) {
+            knownDriversRef.current.add(id);
+            playSound('newRequest'); // Sound
+
+            const newNotif = {
+              id: `driver-${id}`,
+              type: 'new_driver',
+              title: 'Novo piloto aguardando aprovação',
+              message: `${driver.name} enviou documentos.`,
+              time: new Date(),
+              read: false,
+              driver: driver.name
+            };
+            setNotifications(prev => [newNotif, ...prev]);
+          }
+        }
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const deleteNotification = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   // Occurrences filter state
   const [occurrenceSearch, setOccurrenceSearch] = useState('');
@@ -2063,7 +2088,10 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
                                 <p className={`text-sm ${!notif.read ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{notif.title}</p>
-                                {!notif.read && <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 mt-1.5"></span>}
+                                <div className="flex items-center gap-1">
+                                  {!notif.read && <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></span>}
+                                  <button onClick={(e) => deleteNotification(e, notif.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={12} /></button>
+                                </div>
                               </div>
                               <p className="text-xs text-gray-500 mt-0.5 truncate">{notif.message}</p>
                               <p className="text-[10px] text-gray-400 mt-1">
@@ -2079,7 +2107,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                     </div>
                     <div className="p-3 border-t border-gray-100 bg-gray-50">
                       <button
-                        onClick={() => { setShowNotifications(false); setActiveTab('reports'); }}
+                        onClick={() => { setShowNotifications(false); setActiveTab('occurrences'); }}
                         className="w-full text-center text-sm text-orange-600 hover:underline font-medium"
                       >
                         Ver todas as notificações
@@ -2095,7 +2123,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {!dashboardData && !loading ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 animate-fade-in">
               <AlertTriangle size={64} className="mb-4 text-orange-200" />
               <h3 className="text-xl font-medium text-gray-600">Erro ao carregar dados</h3>
               <p className="text-sm mb-4">Verifique sua conexão ou se o banco de dados está vazio.</p>
