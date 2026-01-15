@@ -19,15 +19,25 @@ export interface DashboardData {
 export const fetchDashboardData = async (): Promise<DashboardData> => {
   // MOCK DATA for Dashboard
   if (isMockMode || !db) {
-    // Retornar dados falsos para demonstração
-    const mockDrivers: Driver[] = [
+    // Fetch REAL drivers from localStorage (those who logged in)
+    const realDrivers: Driver[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('motoja_user_')) {
+        try {
+          const userData = JSON.parse(localStorage.getItem(key) || '{}');
+          if (userData.role === 'driver') {
+            realDrivers.push(userData as Driver);
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // Fallback mock drivers if no real ones exist
+    const mockDrivers: Driver[] = realDrivers.length > 0 ? realDrivers : [
       { ...MOCK_DRIVER, id: 'd1', name: 'Carlos Oliveira', status: 'online', location: { lat: -23.1047, lng: -48.9213 }, vehicle: 'Honda CG 160', phone: '(14) 99123-4567' },
       { ...MOCK_DRIVER, id: 'd2', name: 'Marcos Santos', status: 'busy', location: { lat: -23.1060, lng: -48.9250 }, vehicle: 'Yamaha Factor', phone: '(14) 99234-5678' },
       { ...MOCK_DRIVER, id: 'd3', name: 'Ana Pereira', status: 'offline', location: { lat: -23.1025, lng: -48.9180 }, vehicle: 'Bike Caloi', phone: '(14) 99345-6789' },
-      { ...MOCK_DRIVER, id: 'd4', name: 'Roberto Silva', status: 'online', location: { lat: -23.1080, lng: -48.9280 }, vehicle: 'Honda Biz', phone: '(14) 99456-7890' },
-      { ...MOCK_DRIVER, id: 'd5', name: 'Fernanda Lima', status: 'online', location: { lat: -23.1010, lng: -48.9150 }, vehicle: 'Bicicleta Elétrica', phone: '(14) 99567-8901' },
-      { ...MOCK_DRIVER, id: 'd6', name: 'José Almeida', status: 'busy', location: { lat: -23.1120, lng: -48.9320 }, vehicle: 'Honda Pop 110', phone: '(14) 99678-9012' },
-      { ...MOCK_DRIVER, id: 'd7', name: 'Patrícia Costa', status: 'online', location: { lat: -23.0990, lng: -48.9100 }, vehicle: 'Yamaha YBR', phone: '(14) 99789-0123' }
     ];
 
     const mockPassengers: User[] = [

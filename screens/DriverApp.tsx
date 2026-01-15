@@ -173,12 +173,26 @@ export const DriverApp = () => {
 
   }, [activeRide?.id, currentDriverLocation]);
 
-  const toggleOnline = () => {
-    if (!isOnline) {
+  const toggleOnline = async () => {
+    if (!currentDriver) return;
+    const newStatus = !isOnline;
+
+    if (newStatus) {
       initAudio(); // Inicializa áudio na primeira interação
       ensureNotificationPermission(); // Solicita permissão de notificação
     }
-    setIsOnline(!isOnline);
+
+    setIsOnline(newStatus);
+
+    // Sync status to database so Admin can see
+    try {
+      await updateUserProfile(currentDriver.id, {
+        status: newStatus ? 'online' : 'offline',
+        location: currentDriverLocation || undefined
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar status:", error);
+    }
   };
 
   // Função para rejeitar com animação de saída (descendo)
