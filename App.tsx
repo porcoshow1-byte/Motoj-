@@ -69,12 +69,10 @@ const Main = () => {
   // 2. Driver Registration Direct Link (/cadastro-motorista)
   // This route is ALWAYS for new driver registration - no login state allowed
   if (currentRole === 'driver-register') {
-    // If someone is logged in, log them out first
+    // If user just registered successfully, redirect to driver app
     if (user) {
-      logout().then(() => {
-        // Force reload to clear auth state completely
-        window.location.reload();
-      });
+      // User registered successfully, change role to driver to access driver app
+      setCurrentRole('driver');
       return (
         <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
@@ -85,7 +83,7 @@ const Main = () => {
     return (
       <AuthScreen
         role="driver-register"
-        onLoginSuccess={() => { }}
+        onLoginSuccess={() => { setCurrentRole('driver'); }}
         onBack={() => setCurrentRole('selection')}
       />
     );
@@ -112,9 +110,8 @@ const Main = () => {
     return <DriverApp />;
   }
 
-  // Admin
-  if (currentRole === 'admin') {
-    // FIX: Logout now redirects to 'admin' (which triggers AuthScreen because !user), not 'landing'
+  // Admin - requires user to be logged in
+  if (currentRole === 'admin' && user) {
     return <AdminDashboard onLogout={async () => { await logout(); setCurrentRole('admin'); }} />;
   }
 
