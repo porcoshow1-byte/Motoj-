@@ -67,12 +67,21 @@ const Main = () => {
   }
 
   // 2. Driver Registration Direct Link (/cadastro-motorista)
+  // This route is ALWAYS for new driver registration - no login state allowed
   if (currentRole === 'driver-register') {
+    // If someone is logged in, log them out first
     if (user) {
-      // Already logged in as driver, go to driver app
-      return <DriverApp />;
+      logout().then(() => {
+        // Force reload to clear auth state completely
+        window.location.reload();
+      });
+      return (
+        <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        </div>
+      );
     }
-    // Not logged in, show registration screen
+    // Show clean registration screen
     return (
       <AuthScreen
         role="driver-register"
