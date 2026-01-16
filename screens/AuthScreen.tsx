@@ -193,10 +193,10 @@ export const AuthScreen = ({ role: rawRole, onLoginSuccess, onBack }: { role: st
     <div className="min-h-screen flex bg-white animate-fade-in w-full">
       {/* Left Panel - Image (Visible on Desktop) */}
       <div className={`hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900 items-center justify-center`}>
-        {/* Background Image Layer */}
+        {/* Background Image Layer - Uses Visual Settings for ALL roles */}
         <div className="absolute inset-0 z-0">
-          {role === 'admin' ? (
-            <img src={getSettings().visual?.loginBackgroundImage || "/assets/admin_login.png"} className="w-full h-full object-cover opacity-90" alt="Login Background" />
+          {getSettings().visual?.loginBackgroundImage ? (
+            <img src={getSettings().visual!.loginBackgroundImage} className="w-full h-full object-cover opacity-90" alt="Login Background" />
           ) : (
             <div className={`w-full h-full bg-gradient-to-br ${roleInfo.gradient}`}></div>
           )}
@@ -205,16 +205,14 @@ export const AuthScreen = ({ role: rawRole, onLoginSuccess, onBack }: { role: st
         {/* Overlay for readability if image fails or needs darkening */}
         <div className="absolute inset-0 bg-black/40 z-10"></div>
 
-        {/* Content on Left Panel */}
+        {/* Content on Left Panel - Uses Visual Settings */}
         <div className="relative z-20 p-12 text-white max-w-lg h-full flex flex-col justify-center">
           <div className="flex-1 flex flex-col justify-center">
             <h1 className="text-5xl font-bold mb-4">
-              {role === 'admin' && getSettings().visual?.loginTitle ? getSettings().visual!.loginTitle : APP_CONFIG.name}
+              {getSettings().visual?.loginTitle || APP_CONFIG.name}
             </h1>
             <p className="text-xl opacity-90 leading-relaxed mb-8">
-              {role === 'admin'
-                ? (getSettings().visual?.loginSubtitle || 'Gestão completa da plataforma de mobilidade em um único lugar.')
-                : 'Conectando destinos, entregando confiança e agilidade para o seu dia a dia.'}
+              {getSettings().visual?.loginSubtitle || 'Conectando destinos, entregando confiança e agilidade para o seu dia a dia.'}
             </p>
           </div>
 
