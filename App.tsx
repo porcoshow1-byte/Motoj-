@@ -66,6 +66,22 @@ const Main = () => {
     return <LandingPage onStartDemo={() => setCurrentRole('selection')} />;
   }
 
+  // 2. Driver Registration Direct Link (/cadastro-motorista)
+  if (currentRole === 'driver-register') {
+    if (user) {
+      // Already logged in as driver, go to driver app
+      return <DriverApp />;
+    }
+    // Not logged in, show registration screen
+    return (
+      <AuthScreen
+        role="driver-register"
+        onLoginSuccess={() => { }}
+        onBack={() => setCurrentRole('selection')}
+      />
+    );
+  }
+
   // Se o usuário selecionou um papel (ex: passageiro) mas NÃO está logado, mostra Login
   if (currentRole !== 'selection' && !user) {
     return (
