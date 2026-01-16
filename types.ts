@@ -62,6 +62,8 @@ export interface Driver {
   earningsToday: number;
   phone: string;
   verificationStatus?: 'pending' | 'approved' | 'rejected';
+  totalRides?: number;
+  email?: string;
   cnhUrl?: string;
   rejectionReason?: string;
 }

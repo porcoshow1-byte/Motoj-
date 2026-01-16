@@ -78,88 +78,137 @@ const DriverDetailModal = ({ driver, onClose }: { driver: Driver, onClose: () =>
   };
 
   if (!driver) return null;
+  const openWhatsApp = () => {
+    const cleanPhone = driver.phone.replace(/\D/g, '');
+    window.open(`https://wa.me/55${cleanPhone}`, '_blank');
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] overflow-y-auto">
-        <div className="bg-gray-900 p-6 flex justify-between items-start text-white">
-          <div className="flex items-center gap-4">
-            <div className="relative group cursor-pointer" onClick={() => alert('Alteração de foto do motorista (simulação)')}>
-              <img src={driver.avatar} className="w-16 h-16 rounded-full border-2 border-white object-cover" />
-              <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-white text-xs font-bold">Alterar</span>
-              </div>
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="bg-gray-900 p-6 flex justify-between items-start text-white shrink-0">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <img src={driver.avatar || `https://ui-avatars.com/api/?name=${driver.name}`} className="w-20 h-20 rounded-full border-4 border-white object-cover bg-gray-700" />
+              <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-white ${driver.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`}></div>
             </div>
             <div>
-              <h2 className="text-xl font-bold">{driver.name}</h2>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <span className="flex items-center gap-1"><Star size={12} className="text-yellow-400 fill-current" /> {driver.rating}</span>
-                <span>•</span>
-                <span className="capitalize">{driver.status}</span>
+              <h2 className="text-2xl font-bold">{driver.name}</h2>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400 mt-1">
+                <span className="flex items-center gap-1 bg-gray-800 px-2 py-0.5 rounded"><Star size={12} className="text-yellow-400 fill-current" /> {driver.rating}</span>
+                <span className="flex items-center gap-1 bg-gray-800 px-2 py-0.5 rounded"><Bike size={12} /> {driver.totalRides || 0} Corridas</span>
+                <span className="flex items-center gap-1 bg-gray-800 px-2 py-0.5 rounded text-gray-300">ID: {driver.id}</span>
               </div>
-              <Badge color={driver.verificationStatus === 'approved' ? 'green' : driver.verificationStatus === 'rejected' ? 'red' : 'orange'}>
-                {driver.verificationStatus === 'approved' ? 'Verificado' : driver.verificationStatus === 'rejected' ? 'Rejeitado' : 'Pendente'}
-              </Badge>
+              <div className="mt-2">
+                <Badge color={driver.verificationStatus === 'approved' ? 'green' : driver.verificationStatus === 'rejected' ? 'red' : 'orange'}>
+                  {driver.verificationStatus === 'approved' ? 'Verificado' : driver.verificationStatus === 'rejected' ? 'Rejeitado' : 'Em Análise'}
+                </Badge>
+              </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition"><X size={24} /></button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* CNH Verification Area */}
-          {driver.verificationStatus === 'pending' && (
-            <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl">
-              <h3 className="font-bold text-orange-800 mb-2 flex items-center gap-2"><AlertTriangle size={18} /> Verificação Pendente</h3>
-              <p className="text-sm text-gray-600 mb-3">Este motorista enviou a CNH e aguarda aprovação.</p>
-              {driver.cnhUrl ? (
-                <div className="rounded-lg overflow-hidden border border-gray-300 mb-3">
-                  <img src={driver.cnhUrl} alt="CNH" className="w-full h-auto object-contain max-h-64 bg-gray-100" />
-                </div>
-              ) : (
-                <p className="text-red-500 text-sm italic mb-3">Nenhuma foto de CNH encontrada.</p>
-              )}
-              <div className="flex gap-2">
-                <Button fullWidth variant="success" onClick={() => handleAction('approve')} isLoading={loading}>Aprovar Cadastro</Button>
-                <Button fullWidth variant="danger" onClick={() => handleAction('block')} isLoading={loading}>Rejeitar</Button>
-              </div>
-            </div>
-          )}
+        {/* Scrollable Content */}
+        <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-              <p className="text-xs text-gray-500 uppercase mb-1">Veículo</p>
-              <div className="flex items-center gap-2">
-                <Car size={16} className="text-orange-500" />
+          {/* Left Column: Info */}
+          <div className="space-y-6">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+              <h3 className="font-bold text-gray-800 border-b border-gray-200 pb-2 mb-2">Dados de Contato</h3>
+
+              <div className="grid grid-cols-1 gap-3">
                 <div>
-                  <p className="font-bold text-gray-800">{driver.plate}</p>
-                  <p className="text-xs text-gray-500">{driver.vehicle}</p>
+                  <label className="text-xs text-gray-500 uppercase">E-mail</label>
+                  <p className="font-medium text-gray-900">{driver.email || 'Não informado'}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 uppercase">Telefone / WhatsApp</label>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-900">{driver.phone || 'N/A'}</p>
+                    {driver.phone && (
+                      <button onClick={openWhatsApp} className="mb-1 ml-2 px-3 py-1 bg-green-50 text-green-700 text-xs rounded-full border border-green-200 hover:bg-green-100 flex items-center gap-1 inline-flex" title="Abrir WhatsApp">
+                        <MessageSquare size={12} /> WhatsApp
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-              <p className="text-xs text-gray-500 uppercase mb-1">Contato</p>
-              <div className="flex items-center gap-2">
-                <Phone size={16} className="text-green-500" />
-                <p className="font-bold text-gray-800">{driver.phone || "N/A"}</p>
+
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+              <h3 className="font-bold text-gray-800 border-b border-gray-200 pb-2 mb-2">Veículo</h3>
+              <div className="flex items-center gap-4">
+                <div className="bg-orange-100 p-3 rounded-full text-orange-600">
+                  <Car size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-lg text-gray-900">{driver.plate}</h4>
+                  <p className="text-gray-600">{driver.vehicle}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <h3 className="font-bold text-blue-800 border-b border-blue-200 pb-2 mb-2">Financeiro Hoje</h3>
+              <div className="flex justify-between items-center">
+                <span className="text-blue-600">Ganhos do dia</span>
+                <span className="text-2xl font-bold text-blue-900">R$ {driver.earningsToday?.toFixed(2) || '0.00'}</span>
               </div>
             </div>
           </div>
 
-          <div>
-            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><FileText size={18} /> Histórico Recente</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm p-2 bg-gray-50 rounded-lg">
-                <span>Faturamento Hoje</span>
-                <span className="font-bold text-green-600">R$ {driver.earningsToday?.toFixed(2)}</span>
-              </div>
+          {/* Right Column: CNH & Actions */}
+          <div className="space-y-6">
+            {/* CNH Preview */}
+            <div className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-4 flex flex-col items-center justify-center min-h-[250px] relative hover:border-orange-300 transition-colors">
+              <h3 className="absolute top-4 left-4 font-bold text-gray-500 text-sm uppercase">Documento CNH</h3>
+              {driver.cnhUrl ? (
+                driver.cnhUrl.toLowerCase().endsWith('.pdf') ? (
+                  <iframe src={driver.cnhUrl} className="w-full h-64 rounded-lg border border-gray-200" title="CNH PDF" />
+                ) : (
+                  <img src={driver.cnhUrl} alt="CNH" className="w-full h-auto max-h-[300px] object-contain rounded-lg shadow-sm cursor-pointer" onClick={() => window.open(driver.cnhUrl, '_blank')} />
+                )
+              ) : (
+                <div className="text-center text-gray-400">
+                  <AlertTriangle size={48} className="mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma CNH anexada</p>
+                  <p className="text-xs mt-1">O motorista não enviou o documento.</p>
+                </div>
+              )}
+              {driver.cnhUrl && (
+                <a href={driver.cnhUrl} target="_blank" rel="noreferrer" className="absolute bottom-4 right-4 bg-gray-900 text-white text-xs px-3 py-1 rounded-full flex items-center gap-1 hover:bg-black transition">
+                  <Download size={12} /> Baixar/Ampliar
+                </a>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-4 border-t border-gray-100 flex flex-col gap-3">
+              {driver.verificationStatus === 'pending' && (
+                <>
+                  <Button fullWidth variant="success" onClick={() => handleAction('approve')} isLoading={loading}>
+                    <CheckCircle className="mr-2" size={20} /> Aprovar Cadastro
+                  </Button>
+                  <Button fullWidth variant="danger" onClick={() => handleAction('block')} isLoading={loading}>
+                    <X className="mr-2" size={20} /> Rejeitar Cadastro
+                  </Button>
+                </>
+              )}
+              {driver.verificationStatus === 'approved' && (
+                <Button fullWidth variant="danger" onClick={() => handleAction('block')} isLoading={loading}>
+                  <Shield className="mr-2" size={18} /> Bloquear Motorista
+                </Button>
+              )}
+              {driver.verificationStatus === 'rejected' && (
+                <Button fullWidth variant="outline" onClick={() => handleAction('approve')} isLoading={loading}>
+                  Reconsiderar e Aprovar
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <Button fullWidth variant="outline" onClick={onClose}>Fechar</Button>
-            {driver.verificationStatus === 'approved' && (
-              <Button fullWidth variant="danger" onClick={() => handleAction('block')} isLoading={loading}>Bloquear</Button>
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -1167,10 +1216,24 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
     }
   };
 
-  const handleBulkAction = (action: 'approve' | 'block') => {
-    alert(`${action === 'approve' ? 'Aprovando' : 'Bloqueando'} ${selectedDriverIds.length} motoristas.`);
-    // Here you would call an API function
-    setSelectedDriverIds([]);
+  const handleBulkAction = async (action: 'approve' | 'block') => {
+    if (!confirm(`Confirma ${action === 'approve' ? 'APROVAR' : 'BLOQUEAR'} ${selectedDriverIds.length} motoristas?`)) return;
+    setLoading(true);
+    try {
+      const promises = selectedDriverIds.map(id => updateUserProfile(id, {
+        verificationStatus: action === 'approve' ? 'approved' : 'rejected',
+        status: action === 'approve' ? 'offline' : 'offline'
+      }));
+      await Promise.all(promises);
+      alert("Ação em massa concluída com sucesso!");
+      setSelectedDriverIds([]);
+      loadData();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao processar ação em massa");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 4. Export Functionality
@@ -2522,6 +2585,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                           </div>
                         </th>
                         <th className="p-4 whitespace-nowrap">Status</th>
+                        <th className="p-4 whitespace-nowrap text-center">Verificação</th>
                         {/* Coluna Avaliação com Ordenação */}
                         <th
                           className={`p-4 flex items-center gap-1 cursor-pointer hover:bg-gray-100 transition rounded-lg whitespace-nowrap ${sortField === 'rating' ? 'text-orange-600' : ''}`}
@@ -2554,6 +2618,11 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                           <td className="p-4 whitespace-nowrap">
                             <Badge color={driver.status === 'online' ? 'green' : driver.status === 'busy' ? 'orange' : 'gray'}>
                               {driver.status === 'online' ? 'Online' : driver.status === 'busy' ? 'Em corrida' : 'Offline'}
+                            </Badge>
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-center">
+                            <Badge color={driver.verificationStatus === 'approved' ? 'green' : driver.verificationStatus === 'rejected' ? 'red' : 'orange'}>
+                              {driver.verificationStatus === 'approved' ? 'Verificado' : driver.verificationStatus === 'rejected' ? 'Rejeitado' : 'Pendente'}
                             </Badge>
                           </td>
                           <td className="p-4 whitespace-nowrap">
