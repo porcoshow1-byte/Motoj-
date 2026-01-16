@@ -19,6 +19,7 @@ const Main = () => {
     if (path === '/apresentacao' || path === '/apresentacao/') return 'selection';
     if (path === '/passageiro' || path === '/passageiro/') return 'user';
     if (path === '/piloto' || path === '/piloto/') return 'driver';
+    if (path === '/cadastro-motorista' || path === '/cadastro-motorista/') return 'driver-register';
     if (path === '/admin' || path === '/admin/') return 'admin';
     if (path === '/empresas' || path === '/empresas/') return 'company';
 
@@ -37,6 +38,7 @@ const Main = () => {
       case 'selection': path = '/apresentacao'; break;
       case 'user': path = '/passageiro'; break;
       case 'driver': path = '/piloto'; break;
+      case 'driver-register': path = '/cadastro-motorista'; break;
       case 'admin': path = '/admin'; break;
       case 'company': path = '/empresas'; break;
       case 'landing': default: path = '/'; break;

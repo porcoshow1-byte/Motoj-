@@ -10,8 +10,12 @@ import { saveCompany, getMockCompanies } from '../services/company';
 import { Company } from '../types';
 import { getSettings } from '../services/settings';
 
-export const AuthScreen = ({ role, onLoginSuccess, onBack }: { role: string, onLoginSuccess: () => void, onBack: () => void }) => {
-  const [isLogin, setIsLogin] = useState(true);
+export const AuthScreen = ({ role: rawRole, onLoginSuccess, onBack }: { role: string, onLoginSuccess: () => void, onBack: () => void }) => {
+  // Handle special 'driver-register' role: default to registration mode
+  const isDirectRegistration = rawRole === 'driver-register';
+  const role = isDirectRegistration ? 'driver' : rawRole;
+
+  const [isLogin, setIsLogin] = useState(!isDirectRegistration);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Role = 'landing' | 'user' | 'driver' | 'admin' | 'selection' | 'company';
+export type Role = 'landing' | 'user' | 'driver' | 'driver-register' | 'admin' | 'selection' | 'company';
 
 export enum ServiceType {
   MOTO_TAXI = 'MOTO_TAXI',
