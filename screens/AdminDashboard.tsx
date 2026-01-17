@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Card, Button, Badge, Input } from '../components/UI';
-import { fetchDashboardData, DashboardData } from '../services/admin';
+import { fetchDashboardData, DashboardData, createOccurrence, deleteOccurrence } from '../services/admin';
 
 import { updateUserProfile } from '../services/user';
 import { getAllCompanies, saveCompany } from '../services/company';
@@ -18,7 +18,7 @@ import { db, isMockMode } from '../services/firebase';
 import { playSound } from '../services/audio';
 import { CompanyDashboard } from './CompanyDashboard';
 import { SimulatedMap } from '../components/SimulatedMap';
-import { Driver, RideRequest, User } from '../types';
+import { Driver, RideRequest, User, Occurrence } from '../types';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { APP_CONFIG } from '../constants';
 import { collection, getDocs, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
@@ -944,9 +944,17 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
     return () => unsubscribe();
   }, []);
 
-  const deleteNotification = (e: React.MouseEvent, id: string) => {
+  const deleteNotification = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    if (!confirm("Excluir esta notificação/ocorrência permanentemente?")) return;
+    try {
+      await deleteOccurrence(id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (e) {
+      console.error(e);
+      // Fallback for local/mock items
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }
   };
 
   // Occurrences filter state
@@ -955,6 +963,8 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
   const [occurrenceStatusFilter, setOccurrenceStatusFilter] = useState<'all' | 'pending' | 'resolved'>('all');
   const [occurrenceDateFrom, setOccurrenceDateFrom] = useState('');
   const [occurrenceDateTo, setOccurrenceDateTo] = useState('');
+  const [occurrencePassengerSearch, setOccurrencePassengerSearch] = useState('');
+  const [occurrenceRideSearch, setOccurrenceRideSearch] = useState('');
   const [selectedOccurrence, setSelectedOccurrence] = useState<any | null>(null);
   const [occurrenceTimeline, setOccurrenceTimeline] = useState<Record<string, Array<{
     id: string;
@@ -1071,6 +1081,26 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
       setLoading(false);
     }
   };
+
+  // Sync Occurrences from Persistence
+  useEffect(() => {
+    if (dashboardData?.occurrences) {
+      setNotifications(prev => {
+        // Map persistent occurrences to Notification format
+        const dbOccurrences = dashboardData.occurrences.map(o => ({
+          ...o,
+          time: new Date(o.time) // Convert Timestamp number to Date object
+        }));
+
+        // Merge with existing non-persistent/local notifications if needed, 
+        // or effectively replace if we rely on DB. 
+        // For 'new_driver' notifications which might come from other sources?
+        // Admin service fetches EVERYTHING?
+        // Let's assume dashboardData has the truth.
+        return dbOccurrences;
+      });
+    }
+  }, [dashboardData]);
 
   useEffect(() => {
     loadData();
@@ -1856,21 +1886,31 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
               {/* Passenger/Client Selector */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">👤 Passageiro/Cliente</label>
+                <Input
+                  placeholder="Buscar passageiro por nome ou telefone..."
+                  value={occurrencePassengerSearch}
+                  onChange={e => setOccurrencePassengerSearch(e.target.value)}
+                  className="mb-1"
+                />
                 <select
                   value={newOccurrence.selectedPassengerId}
                   onChange={(e) => setNewOccurrence({ ...newOccurrence, selectedPassengerId: e.target.value, selectedRideId: '' })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                  size={5} // Show multiple options for better visibility with search
                 >
-                  <option value="">-- Selecionar passageiro --</option>
+                  <option value="">-- Selecione na lista abaixo --</option>
                   {/* Passengers from safeData.passengers */}
-                  {safeData.passengers.map(user => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} - {user.phone}
-                    </option>
-                  ))}
+                  {safeData.passengers
+                    .filter(user => !occurrencePassengerSearch || user.name.toLowerCase().includes(occurrencePassengerSearch.toLowerCase()) || user.phone.includes(occurrencePassengerSearch))
+                    .map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} - {user.phone}
+                      </option>
+                    ))}
                   {/* Also include clients from manual calls who might not be in users list */}
                   {activeCalls
                     .filter(call => !safeData.passengers.some(u => u.phone === call.client.phone))
+                    .filter(call => !occurrencePassengerSearch || call.client.name.toLowerCase().includes(occurrencePassengerSearch.toLowerCase()) || call.client.phone.includes(occurrencePassengerSearch))
                     .map(call => (
                       <option key={`call-client-${call.id}`} value={`call-client-${call.id}`}>
                         📞 {call.client.name} - {call.client.phone}
@@ -1882,14 +1922,22 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
               {/* Trip Selector - filtered by selected passenger */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">🚗 Viagem Relacionada (opcional)</label>
+                <Input
+                  placeholder="Buscar viagem por ID..."
+                  value={occurrenceRideSearch}
+                  onChange={e => setOccurrenceRideSearch(e.target.value)}
+                  className="mb-1"
+                  disabled={!newOccurrence.selectedPassengerId}
+                />
                 <select
                   value={newOccurrence.selectedRideId}
                   onChange={(e) => setNewOccurrence({ ...newOccurrence, selectedRideId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
                   disabled={!newOccurrence.selectedPassengerId}
+                  size={newOccurrence.selectedPassengerId ? 5 : 1}
                 >
                   <option value="">
-                    {newOccurrence.selectedPassengerId ? '-- Selecionar viagem --' : '-- Selecione um passageiro primeiro --'}
+                    {newOccurrence.selectedPassengerId ? '-- Selecione uma viagem --' : '-- Selecione um passageiro primeiro --'}
                   </option>
                   {newOccurrence.selectedPassengerId && (
                     <>
@@ -1899,17 +1947,19 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                           newOccurrence.selectedPassengerId === `call-client-${call.id}` ||
                           safeData.passengers.find(u => u.id === newOccurrence.selectedPassengerId)?.phone === call.client.phone
                         )
+                        .filter(call => !occurrenceRideSearch || call.protocol.toLowerCase().includes(occurrenceRideSearch.toLowerCase()))
                         .map(call => (
                           <option key={call.id} value={call.id}>
-                            📞 {call.protocol} - {(call.origin || '').substring(0, 25)}... → {(call.destination || '').substring(0, 20)}...
+                            📞 {call.protocol} - {(call.origin || '').substring(0, 25)}...
                           </option>
                         ))}
                       {/* App rides for this passenger */}
                       {safeData.recentRides
                         .filter(r => r.origin && r.passenger.id === newOccurrence.selectedPassengerId)
+                        .filter(r => !occurrenceRideSearch || r.id.toLowerCase().includes(occurrenceRideSearch.toLowerCase()))
                         .map(ride => (
                           <option key={ride.id} value={ride.id}>
-                            📱 #{ride.id} - {(ride.origin || '').substring(0, 25)}... → {(ride.destination || '').substring(0, 20)}...
+                            📱 #{ride.id.substring(0, 4)} - {(ride.origin || '').substring(0, 20)}... → {(ride.destination || '').substring(0, 15)}...
                           </option>
                         ))}
                     </>
@@ -1941,23 +1991,37 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
               </Button>
               <Button
                 disabled={!newOccurrence.title || !newOccurrence.message}
-                onClick={() => {
-                  const protocol = generateProtocol('OC');
-                  const newNotification = {
-                    id: `occ-${Date.now()}`,
-                    type: newOccurrence.type,
-                    title: newOccurrence.title,
-                    message: newOccurrence.message,
-                    time: new Date(),
-                    read: false,
-                    protocol,
-                    priority: newOccurrence.priority,
-                    rideId: newOccurrence.selectedRideId || undefined
-                  };
-                  setNotifications(prev => [newNotification, ...prev]);
-                  alert(`✅ Ocorrência registrada!\n\nProtocolo: ${protocol}`);
-                  setNewOccurrence({ type: 'ride_issue', title: '', message: '', selectedRideId: '', priority: 'medium' });
-                  setShowNewOccurrenceModal(false);
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const protocol = generateProtocol('OC');
+                    const newNotification = {
+                      type: newOccurrence.type,
+                      title: newOccurrence.title,
+                      message: newOccurrence.message,
+                      time: Date.now(), // Persist as timestamp
+                      read: false,
+                      protocol,
+                      priority: newOccurrence.priority,
+                      rideId: newOccurrence.selectedRideId || undefined,
+                      passengerId: newOccurrence.selectedPassengerId || undefined,
+                      status: 'pending' as const
+                    };
+
+                    const created = await createOccurrence(newNotification);
+
+                    // Update local state immediately for responsiveness
+                    setNotifications(prev => [{ ...created, time: new Date(created.time) }, ...prev]);
+
+                    alert(`✅ Ocorrência registrada!\n\nProtocolo: ${protocol}`);
+                    setNewOccurrence({ type: 'ride_issue', title: '', message: '', selectedRideId: '', priority: 'medium' });
+                    setShowNewOccurrenceModal(false);
+                    loadData(); // Trigger reload to ensure sync
+                  } catch (e) {
+                    alert("Erro ao salvar ocorrência.");
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
                 className="flex-1"
               >

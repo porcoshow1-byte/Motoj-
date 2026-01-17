@@ -115,6 +115,20 @@ export interface AdminStats {
 
 export interface MenuItem {
   id: string;
-  label: string;
   icon: React.ReactNode;
+}
+
+export interface Occurrence {
+  id: string;
+  type: 'ride_issue' | 'payment' | 'feedback' | 'support_request' | 'system' | 'new_driver';
+  title: string;
+  message: string;
+  time: number; // Timestamp
+  read: boolean;
+  protocol?: string;
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+  rideId?: string;
+  passengerId?: string; // Searchable passenger
+  driverId?: string;
+  status: 'pending' | 'resolved' | 'investigating';
 }

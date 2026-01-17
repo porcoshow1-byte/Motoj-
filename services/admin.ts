@@ -1,6 +1,6 @@
 import { db, isMockMode } from './firebase';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { Driver, RideRequest, User } from '../types';
+import { collection, getDocs, query, where, orderBy, limit, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { Driver, RideRequest, User, Occurrence } from '../types';
 import { MOCK_DRIVER } from '../constants';
 
 export interface DashboardData {
@@ -14,8 +14,31 @@ export interface DashboardData {
   drivers: Driver[];
   passengers: User[];
   recentRides: RideRequest[];
+  occurrences: Occurrence[];
   error?: string;
 }
+
+// --- Occurrence Service Functions ---
+export const createOccurrence = async (occurrence: Omit<Occurrence, 'id'>) => {
+  if (!db) return { id: `mock-${Date.now()}`, ...occurrence };
+  try {
+    const docRef = await addDoc(collection(db, 'occurrences'), occurrence);
+    return { id: docRef.id, ...occurrence };
+  } catch (e) {
+    console.error("Erro ao criar ocorrência:", e);
+    throw e;
+  }
+};
+
+export const deleteOccurrence = async (id: string) => {
+  if (!db) return; // Mock mode
+  try {
+    await deleteDoc(doc(db, 'occurrences', id));
+  } catch (e) {
+    console.error("Erro ao excluir ocorrência:", e);
+    throw e;
+  }
+};
 
 export const fetchDashboardData = async (): Promise<DashboardData> => {
   // MOCK DATA for Dashboard
@@ -72,7 +95,8 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       passengers: mockPassengers,
       recentRides: mockRides.length > 0 ? mockRides : [
         { id: '123456', origin: 'Rua A', destination: 'Rua B', price: 15.50, status: 'completed', passenger: { name: 'João' }, createdAt: Date.now() } as any
-      ]
+      ],
+      occurrences: [] // Mock occurrences empty by default
     };
   }
 
@@ -80,6 +104,7 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
     let drivers: Driver[] = [];
     let passengers: User[] = [];
     let rides: RideRequest[] = [];
+    let occurrences: Occurrence[] = [];
     let fetchError = '';
 
     // 1. Fetch Drivers
@@ -110,6 +135,15 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       });
     } catch (e) {
       console.warn("Erro ao buscar corridas:", e);
+    }
+
+    // 4. Fetch Occurrences
+    try {
+      const occQuery = query(collection(db, 'occurrences'), orderBy('time', 'desc'));
+      const occSnap = await getDocs(occQuery);
+      occurrences = occSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Occurrence));
+    } catch (e) {
+      console.warn("Erro ao buscar ocorrências:", e);
     }
 
     const completedRides = rides.filter(r => r.status === 'completed');
@@ -159,7 +193,8 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       chartData,
       drivers,
       passengers,
-      recentRides: rides.slice(0, 10)
+      recentRides: rides.slice(0, 10),
+      occurrences
     };
 
   } catch (error) {
@@ -169,7 +204,8 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       chartData: [],
       drivers: [],
       passengers: [],
-      recentRides: []
+      recentRides: [],
+      occurrences: []
     };
   }
 };
