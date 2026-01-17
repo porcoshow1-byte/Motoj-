@@ -1995,6 +1995,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-3 mt-6 px-2">Gestão</p>
           <SidebarItem id="drivers" icon={<Bike size={20} />} label="Pilotos" />
           <SidebarItem id="users" icon={<Users size={20} />} label="Passageiros" />
+          <SidebarItem id="occurrences" icon={<AlertTriangle size={20} />} label="Ocorrências" badge={notifications.filter(n => !n.read && (n.type === 'ride_issue' || n.type === 'feedback')).length} />
           <SidebarItem id="reports" icon={<FileText size={20} />} label="Relatórios" />
 
           <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-3 mt-6 px-2">Configuração</p>
