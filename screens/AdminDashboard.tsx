@@ -1883,68 +1883,113 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                 </div>
               </div>
 
-              {/* Passenger/Client Selector */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">👤 Passageiro/Cliente</label>
+              {/* Passenger/Client Selector - Autocomplete Style */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">👤 Passageiro/Cliente *</label>
                 <Input
-                  placeholder="Buscar por nome, telefone ou email..."
+                  placeholder="Digite nome, telefone ou email para buscar..."
                   value={occurrencePassengerSearch}
-                  onChange={e => setOccurrencePassengerSearch(e.target.value)}
-                  className="mb-1"
+                  onChange={e => {
+                    setOccurrencePassengerSearch(e.target.value);
+                    // Clear selection if user starts typing again
+                    if (newOccurrence.selectedPassengerId) {
+                      setNewOccurrence({ ...newOccurrence, selectedPassengerId: '', selectedRideId: '' });
+                    }
+                  }}
+                  className={newOccurrence.selectedPassengerId ? 'border-green-500 bg-green-50' : ''}
                 />
-                <select
-                  value={newOccurrence.selectedPassengerId}
-                  onChange={(e) => setNewOccurrence({ ...newOccurrence, selectedPassengerId: e.target.value, selectedRideId: '' })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                  size={5}
-                >
-                  <option value="">-- Selecione na lista abaixo --</option>
-                  {/* Passengers from safeData.passengers - filtered by name, phone, or email */}
-                  {safeData.passengers
-                    .filter(user => {
-                      if (!occurrencePassengerSearch) return true;
-                      const search = occurrencePassengerSearch.toLowerCase();
-                      const nameMatch = (user.name || '').toLowerCase().includes(search);
-                      const phoneMatch = (user.phone || '').includes(occurrencePassengerSearch);
-                      const emailMatch = (user.email || '').toLowerCase().includes(search);
-                      return nameMatch || phoneMatch || emailMatch;
-                    })
-                    .map(user => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} {user.phone ? `- ${user.phone}` : ''} {user.email ? `(${user.email})` : ''}
-                      </option>
-                    ))}
-                  {/* Also include clients from manual calls who might not be in users list */}
-                  {activeCalls
-                    .filter(call => !safeData.passengers.some(u => u.phone === call.client.phone))
-                    .filter(call => !occurrencePassengerSearch || call.client.name.toLowerCase().includes(occurrencePassengerSearch.toLowerCase()) || call.client.phone.includes(occurrencePassengerSearch))
-                    .map(call => (
-                      <option key={`call-client-${call.id}`} value={`call-client-${call.id}`}>
-                        📞 {call.client.name} - {call.client.phone}
-                      </option>
-                    ))}
-                </select>
+                {/* Show selected passenger info */}
+                {newOccurrence.selectedPassengerId && (
+                  <div className="mt-1 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                    <span className="text-sm text-green-700">
+                      ✓ {safeData.passengers.find(u => u.id === newOccurrence.selectedPassengerId)?.name ||
+                        activeCalls.find(c => `call-client-${c.id}` === newOccurrence.selectedPassengerId)?.client.name ||
+                        'Cliente selecionado'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewOccurrence({ ...newOccurrence, selectedPassengerId: '', selectedRideId: '' });
+                        setOccurrencePassengerSearch('');
+                      }}
+                      className="text-red-500 hover:text-red-700 text-xs"
+                    >
+                      ✕ Limpar
+                    </button>
+                  </div>
+                )}
+                {/* Autocomplete dropdown - only show when typing 2+ chars and no selection */}
+                {occurrencePassengerSearch.length >= 2 && !newOccurrence.selectedPassengerId && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {safeData.passengers
+                      .filter(user => {
+                        const search = occurrencePassengerSearch.toLowerCase();
+                        return (user.name || '').toLowerCase().includes(search) ||
+                          (user.phone || '').includes(occurrencePassengerSearch) ||
+                          (user.email || '').toLowerCase().includes(search);
+                      })
+                      .slice(0, 10) // Limit results
+                      .map(user => (
+                        <div
+                          key={user.id}
+                          onClick={() => {
+                            setNewOccurrence({ ...newOccurrence, selectedPassengerId: user.id, selectedRideId: '' });
+                            setOccurrencePassengerSearch(user.name || '');
+                          }}
+                          className="px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-0"
+                        >
+                          <div className="font-medium text-sm">{user.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {user.phone && <span>📱 {user.phone}</span>}
+                            {user.email && <span className="ml-2">✉️ {user.email}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    {/* Manual call clients */}
+                    {activeCalls
+                      .filter(call => !safeData.passengers.some(u => u.phone === call.client.phone))
+                      .filter(call => {
+                        const search = occurrencePassengerSearch.toLowerCase();
+                        return call.client.name.toLowerCase().includes(search) ||
+                          call.client.phone.includes(occurrencePassengerSearch);
+                      })
+                      .map(call => (
+                        <div
+                          key={`call-client-${call.id}`}
+                          onClick={() => {
+                            setNewOccurrence({ ...newOccurrence, selectedPassengerId: `call-client-${call.id}`, selectedRideId: '' });
+                            setOccurrencePassengerSearch(call.client.name);
+                          }}
+                          className="px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-0"
+                        >
+                          <div className="font-medium text-sm">📞 {call.client.name}</div>
+                          <div className="text-xs text-gray-500">📱 {call.client.phone}</div>
+                        </div>
+                      ))}
+                    {safeData.passengers.filter(u => {
+                      const s = occurrencePassengerSearch.toLowerCase();
+                      return (u.name || '').toLowerCase().includes(s) || (u.phone || '').includes(occurrencePassengerSearch) || (u.email || '').toLowerCase().includes(s);
+                    }).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm italic">Nenhum resultado encontrado</div>
+                      )}
+                  </div>
+                )}
+                {occurrencePassengerSearch.length > 0 && occurrencePassengerSearch.length < 2 && !newOccurrence.selectedPassengerId && (
+                  <p className="text-xs text-gray-400 mt-1">Digite pelo menos 2 caracteres para buscar...</p>
+                )}
               </div>
 
-              {/* Trip Selector - filtered by selected passenger */}
+              {/* Trip Selector - Standard Dropdown (Drawer Style) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">🚗 Viagem Relacionada (opcional)</label>
-                <Input
-                  placeholder="Buscar viagem por ID..."
-                  value={occurrenceRideSearch}
-                  onChange={e => setOccurrenceRideSearch(e.target.value)}
-                  className="mb-1"
-                  disabled={!newOccurrence.selectedPassengerId}
-                />
                 <select
                   value={newOccurrence.selectedRideId}
                   onChange={(e) => setNewOccurrence({ ...newOccurrence, selectedRideId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
                   disabled={!newOccurrence.selectedPassengerId}
-                  size={newOccurrence.selectedPassengerId ? 5 : 1}
                 >
                   <option value="">
-                    {newOccurrence.selectedPassengerId ? '-- Selecione uma viagem --' : '-- Selecione um passageiro primeiro --'}
+                    {newOccurrence.selectedPassengerId ? '▼ Selecione uma das últimas 5 viagens' : '-- Selecione um passageiro primeiro --'}
                   </option>
                   {newOccurrence.selectedPassengerId && (
                     <>
@@ -1954,21 +1999,20 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                           newOccurrence.selectedPassengerId === `call-client-${call.id}` ||
                           safeData.passengers.find(u => u.id === newOccurrence.selectedPassengerId)?.phone === call.client.phone
                         )
-                        .filter(call => !occurrenceRideSearch || call.protocol.toLowerCase().includes(occurrenceRideSearch.toLowerCase()))
+                        .slice(0, 5)
                         .map(call => (
                           <option key={call.id} value={call.id}>
-                            📞 {call.protocol} - {(call.origin || '').substring(0, 25)}...
+                            📞 {call.protocol} - {call.origin?.substring(0, 30) || 'Origem'}
                           </option>
                         ))}
                       {/* App rides for this passenger - limited to last 5 */}
                       {safeData.recentRides
                         .filter(r => r.origin && r.passenger?.id === newOccurrence.selectedPassengerId)
-                        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) // Most recent first
-                        .slice(0, 5) // Limit to 5 trips
-                        .filter(r => !occurrenceRideSearch || r.id.toLowerCase().includes(occurrenceRideSearch.toLowerCase()))
+                        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+                        .slice(0, 5)
                         .map(ride => (
                           <option key={ride.id} value={ride.id}>
-                            📱 #{ride.id.substring(0, 4)} - {(ride.origin || '').substring(0, 20)}... → {(ride.destination || '').substring(0, 15)}...
+                            📱 #{ride.id.substring(0, 6)} | {new Date(ride.createdAt || 0).toLocaleDateString('pt-BR')} | {(ride.origin || '').substring(0, 25)}...
                           </option>
                         ))}
                     </>
@@ -1976,7 +2020,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                 </select>
                 {newOccurrence.selectedPassengerId &&
                   activeCalls.filter(c => newOccurrence.selectedPassengerId === `call-client-${c.id}` || safeData.passengers.find(u => u.id === newOccurrence.selectedPassengerId)?.phone === c.client.phone).length === 0 &&
-                  safeData.recentRides.filter(r => r.passenger.id === newOccurrence.selectedPassengerId).length === 0 && (
+                  safeData.recentRides.filter(r => r.passenger?.id === newOccurrence.selectedPassengerId).length === 0 && (
                     <p className="text-xs text-gray-500 mt-1 italic">Nenhuma viagem encontrada para este passageiro</p>
                   )}
               </div>
@@ -4362,6 +4406,268 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
       {viewDriver && <DriverDetailModal driver={viewDriver} onClose={() => setViewDriver(null)} />}
       {viewUser && <UserDetailModal user={viewUser} rides={safeData.recentRides} onClose={() => setViewUser(null)} />}
       {showAddDriver && <AddDriverModal onClose={() => setShowAddDriver(false)} />}
+
+      {/* Occurrence Detail Modal - Enhanced with full ride information */}
+      {selectedOccurrence && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className={`p-6 text-white ${selectedOccurrence.type === 'ride_issue' ? 'bg-red-600' :
+                selectedOccurrence.type === 'payment' ? 'bg-green-600' :
+                  selectedOccurrence.type === 'support_request' ? 'bg-blue-600' :
+                    'bg-yellow-600'
+              }`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2 py-1 bg-white/20 rounded text-xs uppercase font-bold">
+                      {selectedOccurrence.type === 'ride_issue' ? 'Problema em Corrida' :
+                        selectedOccurrence.type === 'payment' ? 'Pagamento' :
+                          selectedOccurrence.type === 'support_request' ? 'Suporte' : 'Avaliação'}
+                    </span>
+                    {selectedOccurrence.protocol && (
+                      <span className="px-2 py-1 bg-white/20 rounded text-xs font-mono">
+                        {selectedOccurrence.protocol}
+                      </span>
+                    )}
+                    {selectedOccurrence.priority && (
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${selectedOccurrence.priority === 'critical' ? 'bg-red-900 text-red-100' :
+                          selectedOccurrence.priority === 'high' ? 'bg-orange-900 text-orange-100' :
+                            selectedOccurrence.priority === 'medium' ? 'bg-yellow-900 text-yellow-100' :
+                              'bg-gray-700 text-gray-100'
+                        }`}>
+                        {selectedOccurrence.priority === 'critical' ? '🔴 CRÍTICA' :
+                          selectedOccurrence.priority === 'high' ? '🟠 ALTA' :
+                            selectedOccurrence.priority === 'medium' ? '🟡 MÉDIA' : '⚪ BAIXA'}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-2xl font-bold">{selectedOccurrence.title}</h2>
+                  <p className="text-white/80 text-sm mt-1">
+                    Registrado em {selectedOccurrence.time?.toLocaleDateString?.('pt-BR') || 'N/A'} às {selectedOccurrence.time?.toLocaleTimeString?.('pt-BR', { hour: '2-digit', minute: '2-digit' }) || ''}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedOccurrence(null)} className="text-white/80 hover:text-white p-2">
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Status */}
+              <div className="flex items-center gap-4">
+                <span className={`px-4 py-2 rounded-full font-bold text-sm ${selectedOccurrence.read ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                  }`}>
+                  {selectedOccurrence.read ? '✓ Resolvido' : '⏳ Pendente'}
+                </span>
+                <button
+                  onClick={() => {
+                    setNotifications(notifications.map(n => n.id === selectedOccurrence.id ? { ...n, read: !n.read } : n));
+                    setSelectedOccurrence({ ...selectedOccurrence, read: !selectedOccurrence.read });
+                  }}
+                  className="text-sm text-orange-600 hover:underline"
+                >
+                  {selectedOccurrence.read ? 'Marcar como Pendente' : 'Marcar como Resolvido'}
+                </button>
+              </div>
+
+              {/* Description */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <FileText size={16} /> Descrição Detalhada
+                </h3>
+                <p className="text-gray-700 whitespace-pre-wrap">{selectedOccurrence.message || 'Sem descrição disponível.'}</p>
+              </div>
+
+              {/* Related Ride Details */}
+              {selectedOccurrence.rideId && (() => {
+                // Find the related ride
+                const relatedRide = safeData.recentRides.find(r => r.id === selectedOccurrence.rideId);
+                const relatedCall = activeCalls.find(c => c.id === selectedOccurrence.rideId);
+
+                if (relatedRide) {
+                  return (
+                    <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                      <h3 className="font-bold text-blue-700 mb-3 flex items-center gap-2">
+                        <Car size={16} /> Viagem Relacionada
+                      </h3>
+                      <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">ID da Corrida</p>
+                          <p className="font-mono text-gray-900">#{relatedRide.id}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Data e Hora</p>
+                          <p className="text-gray-900">
+                            {new Date(relatedRide.createdAt || 0).toLocaleDateString('pt-BR')} às {new Date(relatedRide.createdAt || 0).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">📍 Origem</p>
+                          <p className="text-gray-900">{relatedRide.origin || 'Não informado'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">📍 Destino</p>
+                          <p className="text-gray-900">{relatedRide.destination || 'Não informado'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Motorista</p>
+                          <p className="text-gray-900">{relatedRide.driver?.name || 'Não atribuído'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Valor</p>
+                          <p className="text-green-600 font-bold">R$ {(relatedRide.price || 0).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Status da Corrida</p>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${relatedRide.status === 'completed' ? 'bg-green-100 text-green-700' :
+                              relatedRide.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                'bg-yellow-100 text-yellow-700'
+                            }`}>
+                            {relatedRide.status === 'completed' ? 'Concluída' :
+                              relatedRide.status === 'cancelled' ? 'Cancelada' :
+                                relatedRide.status === 'in_progress' ? 'Em Andamento' : relatedRide.status}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else if (relatedCall) {
+                  return (
+                    <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                      <h3 className="font-bold text-purple-700 mb-3 flex items-center gap-2">
+                        <Phone size={16} /> Chamada Relacionada
+                      </h3>
+                      <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Protocolo</p>
+                          <p className="font-mono text-gray-900">{relatedCall.protocol}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Cliente</p>
+                          <p className="text-gray-900">{relatedCall.client.name} - {relatedCall.client.phone}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">📍 Origem</p>
+                          <p className="text-gray-900">{relatedCall.origin || 'Não informado'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">📍 Destino</p>
+                          <p className="text-gray-900">{relatedCall.destination || 'Não informado'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-center text-gray-500">
+                    <p>Viagem relacionada não encontrada (ID: {selectedOccurrence.rideId})</p>
+                  </div>
+                );
+              })()}
+
+              {/* Passenger Info */}
+              {selectedOccurrence.passengerId && (() => {
+                const passenger = safeData.passengers.find(p => p.id === selectedOccurrence.passengerId);
+                if (passenger) {
+                  return (
+                    <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                      <h3 className="font-bold text-indigo-700 mb-3 flex items-center gap-2">
+                        <Users size={16} /> Cliente Relacionado
+                      </h3>
+                      <div className="grid md:grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Nome</p>
+                          <p className="text-gray-900">{passenger.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Telefone</p>
+                          <p className="text-gray-900">{passenger.phone || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">Email</p>
+                          <p className="text-gray-900">{passenger.email || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Timeline/Notes Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                  <History size={16} /> Histórico de Atualizações
+                </h3>
+                <div className="space-y-2 mb-4">
+                  {(occurrenceTimeline[selectedOccurrence.id] || []).length === 0 ? (
+                    <p className="text-gray-400 text-sm italic">Nenhuma atualização registrada.</p>
+                  ) : (
+                    occurrenceTimeline[selectedOccurrence.id].map(entry => (
+                      <div key={entry.id} className="p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700">{entry.content}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {entry.author} • {entry.timestamp.toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTimelineComment}
+                    onChange={(e) => setNewTimelineComment(e.target.value)}
+                    placeholder="Adicionar comentário ou atualização..."
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (newTimelineComment.trim()) {
+                        const newEntry = {
+                          id: `tl-${Date.now()}`,
+                          type: 'comment' as const,
+                          content: newTimelineComment,
+                          author: 'Admin',
+                          timestamp: new Date()
+                        };
+                        setOccurrenceTimeline({
+                          ...occurrenceTimeline,
+                          [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                        });
+                        setNewTimelineComment('');
+                      }
+                    }}
+                    disabled={!newTimelineComment.trim()}
+                  >
+                    <Send size={16} />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between">
+              <Button
+                variant="danger"
+                onClick={() => {
+                  if (confirm('Excluir esta ocorrência permanentemente?')) {
+                    deleteNotification({ stopPropagation: () => { } } as React.MouseEvent, selectedOccurrence.id);
+                    setSelectedOccurrence(null);
+                  }
+                }}
+              >
+                <Trash2 size={16} className="mr-1" /> Excluir
+              </Button>
+              <Button onClick={() => setSelectedOccurrence(null)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 
