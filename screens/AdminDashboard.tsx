@@ -2272,8 +2272,6 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                             key={notif.id}
                             className={`p-4 hover:bg-gray-50 transition cursor-pointer ${!notif.read ? 'bg-orange-50/50' : ''}`}
                             onClick={() => {
-                              // Mark as read
-                              setNotifications(notifications.map(n => n.id === notif.id ? { ...n, read: true } : n));
                               // Close dropdown
                               setShowNotifications(false);
                               // Navigate to appropriate tab based on type
@@ -2282,6 +2280,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                                 setFilterStatus('pending');
                               } else if (notif.type === 'ride_issue' || notif.type === 'payment' || notif.type === 'feedback') {
                                 setActiveTab('occurrences');
+                                setSelectedOccurrence(notif as any);
                               } else if (notif.type === 'system') {
                                 setActiveTab('settings');
                               }
