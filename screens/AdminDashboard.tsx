@@ -1052,7 +1052,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
         }));
       }
     }
-  }, [selectedOccurrence, notifications]);
+  }, [selectedOccurrence?.id]);
 
   // Protocol generator - Format: OC-YYMMDD (9 chars)
   const generateProtocol = (prefix: string = 'OC') => {
@@ -4428,7 +4428,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
       {/* Occurrence Detail Modal - Enhanced with full ride information */}
       {selectedOccurrence && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-7xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className={`p-6 text-white ${selectedOccurrence.type === 'ride_issue' ? 'bg-red-600' :
               selectedOccurrence.type === 'payment' ? 'bg-green-600' :
