@@ -40,6 +40,24 @@ export const deleteOccurrence = async (id: string) => {
   }
 };
 
+// Update occurrence with timeline and other changes
+export const updateOccurrence = async (id: string, data: Partial<Occurrence> & { timeline?: any[] }) => {
+  if (!db) {
+    // Mock mode - save to localStorage
+    const stored = localStorage.getItem('motoja_occurrences') || '{}';
+    const occurrences = JSON.parse(stored);
+    occurrences[id] = { ...occurrences[id], ...data };
+    localStorage.setItem('motoja_occurrences', JSON.stringify(occurrences));
+    return;
+  }
+  try {
+    await updateDoc(doc(db, 'occurrences', id), data);
+  } catch (e) {
+    console.error("Erro ao atualizar ocorrência:", e);
+    throw e;
+  }
+};
+
 export const fetchDashboardData = async (): Promise<DashboardData> => {
   // MOCK DATA for Dashboard
   if (isMockMode || !db) {

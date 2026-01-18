@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Card, Button, Badge, Input } from '../components/UI';
-import { fetchDashboardData, DashboardData, createOccurrence, deleteOccurrence } from '../services/admin';
+import { fetchDashboardData, DashboardData, createOccurrence, deleteOccurrence, updateOccurrence } from '../services/admin';
 
 import { updateUserProfile } from '../services/user';
 import { getAllCompanies, saveCompany } from '../services/company';
@@ -4529,6 +4529,22 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                                 relatedRide.status === 'in_progress' ? 'Em Andamento' : relatedRide.status}
                           </span>
                         </div>
+                        <div>
+                          <p className="text-gray-500 text-xs uppercase font-bold mb-1">💳 Forma de Pagamento</p>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${(relatedRide.paymentMethod as string) === 'pix' ? 'bg-green-100 text-green-700' :
+                            (relatedRide.paymentMethod as string) === 'cash' ? 'bg-yellow-100 text-yellow-700' :
+                              (relatedRide.paymentMethod as string) === 'card' ? 'bg-blue-100 text-blue-700' :
+                                (relatedRide.paymentMethod as string) === 'wallet' ? 'bg-purple-100 text-purple-700' :
+                                  'bg-gray-100 text-gray-700'
+                            }`}>
+                            {(relatedRide.paymentMethod as string) === 'pix' ? '💰 PIX' :
+                              (relatedRide.paymentMethod as string) === 'cash' ? '💵 Dinheiro' :
+                                (relatedRide.paymentMethod as string) === 'card' ? '💳 Cartão' :
+                                  (relatedRide.paymentMethod as string) === 'wallet' ? '👛 Carteira App' :
+                                    (relatedRide.paymentMethod as string) === 'coupon' ? '🎟️ Cupom' :
+                                      'Não informado'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -4595,54 +4611,183 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                 return null;
               })()}
 
-              {/* Timeline/Notes Section */}
+              {/* Timeline/Notes Section - Styled as vertical timeline */}
               <div className="border-t border-gray-200 pt-4">
-                <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
                   <History size={16} /> Histórico de Atualizações
                 </h3>
-                <div className="space-y-2 mb-4">
+                <div className="relative pl-6 border-l-2 border-blue-200 space-y-4 mb-4 max-h-64 overflow-y-auto">
                   {(occurrenceTimeline[selectedOccurrence.id] || []).length === 0 ? (
                     <p className="text-gray-400 text-sm italic">Nenhuma atualização registrada.</p>
                   ) : (
-                    occurrenceTimeline[selectedOccurrence.id].map(entry => (
-                      <div key={entry.id} className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700">{entry.content}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {entry.author} • {entry.timestamp.toLocaleString('pt-BR')}
-                        </p>
+                    occurrenceTimeline[selectedOccurrence.id].map((entry, idx) => (
+                      <div key={entry.id} className="relative">
+                        {/* Timeline dot */}
+                        <div className="absolute -left-[25px] w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow" />
+                        <div className="p-3 bg-gray-50 rounded-lg group">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap">{entry.content}</p>
+                              {entry.attachmentUrl && (
+                                <a href={entry.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 hover:underline">
+                                  <Paperclip size={12} /> Ver anexo
+                                </a>
+                              )}
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                              <button
+                                onClick={() => {
+                                  const newContent = prompt('Editar mensagem:', entry.content);
+                                  if (newContent !== null) {
+                                    setOccurrenceTimeline({
+                                      ...occurrenceTimeline,
+                                      [selectedOccurrence.id]: occurrenceTimeline[selectedOccurrence.id].map(e =>
+                                        e.id === entry.id ? { ...e, content: newContent } : e
+                                      )
+                                    });
+                                  }
+                                }}
+                                className="p-1 text-gray-400 hover:text-blue-600"
+                                title="Editar"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Excluir esta mensagem?')) {
+                                    setOccurrenceTimeline({
+                                      ...occurrenceTimeline,
+                                      [selectedOccurrence.id]: occurrenceTimeline[selectedOccurrence.id].filter(e => e.id !== entry.id)
+                                    });
+                                  }
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-600"
+                                title="Excluir"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {entry.author} • {new Date(entry.timestamp).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTimelineComment}
-                    onChange={(e) => setNewTimelineComment(e.target.value)}
-                    placeholder="Adicionar comentário ou atualização..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                  <Button
-                    onClick={() => {
-                      if (newTimelineComment.trim()) {
-                        const newEntry = {
-                          id: `tl-${Date.now()}`,
-                          type: 'comment' as const,
-                          content: newTimelineComment,
-                          author: 'Admin',
-                          timestamp: new Date()
-                        };
-                        setOccurrenceTimeline({
-                          ...occurrenceTimeline,
-                          [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
-                        });
-                        setNewTimelineComment('');
-                      }
-                    }}
-                    disabled={!newTimelineComment.trim()}
-                  >
-                    <Send size={16} />
-                  </Button>
+                {/* Input area with attachment options */}
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newTimelineComment}
+                      onChange={(e) => setNewTimelineComment(e.target.value)}
+                      placeholder="Adicionar comentário ou atualização..."
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newTimelineComment.trim()) {
+                          const newEntry = {
+                            id: `tl-${Date.now()}`,
+                            type: 'comment' as const,
+                            content: newTimelineComment,
+                            author: 'Admin',
+                            timestamp: new Date()
+                          };
+                          setOccurrenceTimeline({
+                            ...occurrenceTimeline,
+                            [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                          });
+                          setNewTimelineComment('');
+                        }
+                      }}
+                    />
+                    <Button
+                      onClick={() => {
+                        if (newTimelineComment.trim()) {
+                          const newEntry = {
+                            id: `tl-${Date.now()}`,
+                            type: 'comment' as const,
+                            content: newTimelineComment,
+                            author: 'Admin',
+                            timestamp: new Date()
+                          };
+                          setOccurrenceTimeline({
+                            ...occurrenceTimeline,
+                            [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                          });
+                          setNewTimelineComment('');
+                        }
+                      }}
+                      disabled={!newTimelineComment.trim()}
+                      className="!bg-blue-600 hover:!bg-blue-700"
+                    >
+                      <Send size={16} />
+                    </Button>
+                  </div>
+                  {/* Attachment options */}
+                  <div className="flex gap-2 text-xs">
+                    <label className="flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer transition">
+                      <ImageIcon size={14} /> Imagem
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          const file = e.target.files[0];
+                          const newEntry = {
+                            id: `tl-${Date.now()}`,
+                            type: 'attachment' as const,
+                            content: `📷 Imagem anexada: ${file.name}`,
+                            author: 'Admin',
+                            timestamp: new Date(),
+                            attachmentUrl: URL.createObjectURL(file)
+                          };
+                          setOccurrenceTimeline({
+                            ...occurrenceTimeline,
+                            [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                          });
+                        }
+                      }} />
+                    </label>
+                    <label className="flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer transition">
+                      <FileText size={14} /> PDF
+                      <input type="file" accept=".pdf" className="hidden" onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          const file = e.target.files[0];
+                          const newEntry = {
+                            id: `tl-${Date.now()}`,
+                            type: 'attachment' as const,
+                            content: `📄 PDF anexado: ${file.name}`,
+                            author: 'Admin',
+                            timestamp: new Date(),
+                            attachmentUrl: URL.createObjectURL(file)
+                          };
+                          setOccurrenceTimeline({
+                            ...occurrenceTimeline,
+                            [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                          });
+                        }
+                      }} />
+                    </label>
+                    <label className="flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer transition">
+                      🎵 Áudio
+                      <input type="file" accept="audio/*" className="hidden" onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          const file = e.target.files[0];
+                          const newEntry = {
+                            id: `tl-${Date.now()}`,
+                            type: 'attachment' as const,
+                            content: `🎵 Áudio anexado: ${file.name}`,
+                            author: 'Admin',
+                            timestamp: new Date(),
+                            attachmentUrl: URL.createObjectURL(file)
+                          };
+                          setOccurrenceTimeline({
+                            ...occurrenceTimeline,
+                            [selectedOccurrence.id]: [...(occurrenceTimeline[selectedOccurrence.id] || []), newEntry]
+                          });
+                        }
+                      }} />
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4660,8 +4805,41 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
               >
                 <Trash2 size={16} className="mr-1" /> Excluir
               </Button>
-              <Button onClick={() => setSelectedOccurrence(null)}>
-                Fechar
+              <Button
+                onClick={async () => {
+                  try {
+                    // Save timeline and occurrence changes to database
+                    await updateOccurrence(selectedOccurrence.id, {
+                      read: selectedOccurrence.read,
+                      status: selectedOccurrence.read ? 'resolved' : 'pending',
+                      timeline: occurrenceTimeline[selectedOccurrence.id] || []
+                    });
+                    // Update local state
+                    setNotifications(prev => {
+                      const updatedNotifs = prev.map(n =>
+                        n.id === selectedOccurrence.id ? { ...n, read: selectedOccurrence.read } : n
+                      );
+                      // Add a notification about the update
+                      const updateNotif = {
+                        id: `update-${Date.now()}`,
+                        type: 'system' as const,
+                        title: `Ocorrência ${selectedOccurrence.protocol || selectedOccurrence.id.substring(0, 8)} atualizada`,
+                        message: `A ocorrência "${selectedOccurrence.title}" foi atualizada por Admin.`,
+                        time: new Date(),
+                        read: false
+                      };
+                      return [updateNotif, ...updatedNotifs];
+                    });
+                    // Notification will appear in the notification center
+                    alert('✅ Ocorrência salva com sucesso!');
+                    setSelectedOccurrence(null);
+                  } catch (e) {
+                    alert('Erro ao salvar ocorrência.');
+                  }
+                }}
+                className="!bg-green-600 hover:!bg-green-700"
+              >
+                💾 Salvar
               </Button>
             </div>
           </div>
