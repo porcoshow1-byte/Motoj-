@@ -1887,7 +1887,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">👤 Passageiro/Cliente</label>
                 <Input
-                  placeholder="Buscar passageiro por nome ou telefone..."
+                  placeholder="Buscar por nome, telefone ou email..."
                   value={occurrencePassengerSearch}
                   onChange={e => setOccurrencePassengerSearch(e.target.value)}
                   className="mb-1"
@@ -1896,15 +1896,22 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                   value={newOccurrence.selectedPassengerId}
                   onChange={(e) => setNewOccurrence({ ...newOccurrence, selectedPassengerId: e.target.value, selectedRideId: '' })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                  size={5} // Show multiple options for better visibility with search
+                  size={5}
                 >
                   <option value="">-- Selecione na lista abaixo --</option>
-                  {/* Passengers from safeData.passengers */}
+                  {/* Passengers from safeData.passengers - filtered by name, phone, or email */}
                   {safeData.passengers
-                    .filter(user => !occurrencePassengerSearch || user.name.toLowerCase().includes(occurrencePassengerSearch.toLowerCase()) || user.phone.includes(occurrencePassengerSearch))
+                    .filter(user => {
+                      if (!occurrencePassengerSearch) return true;
+                      const search = occurrencePassengerSearch.toLowerCase();
+                      const nameMatch = (user.name || '').toLowerCase().includes(search);
+                      const phoneMatch = (user.phone || '').includes(occurrencePassengerSearch);
+                      const emailMatch = (user.email || '').toLowerCase().includes(search);
+                      return nameMatch || phoneMatch || emailMatch;
+                    })
                     .map(user => (
                       <option key={user.id} value={user.id}>
-                        {user.name} - {user.phone}
+                        {user.name} {user.phone ? `- ${user.phone}` : ''} {user.email ? `(${user.email})` : ''}
                       </option>
                     ))}
                   {/* Also include clients from manual calls who might not be in users list */}
@@ -1953,9 +1960,11 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                             📞 {call.protocol} - {(call.origin || '').substring(0, 25)}...
                           </option>
                         ))}
-                      {/* App rides for this passenger */}
+                      {/* App rides for this passenger - limited to last 5 */}
                       {safeData.recentRides
-                        .filter(r => r.origin && r.passenger.id === newOccurrence.selectedPassengerId)
+                        .filter(r => r.origin && r.passenger?.id === newOccurrence.selectedPassengerId)
+                        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) // Most recent first
+                        .slice(0, 5) // Limit to 5 trips
                         .filter(r => !occurrenceRideSearch || r.id.toLowerCase().includes(occurrenceRideSearch.toLowerCase()))
                         .map(ride => (
                           <option key={ride.id} value={ride.id}>
