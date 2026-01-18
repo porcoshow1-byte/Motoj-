@@ -1035,12 +1035,11 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical'
   });
 
-  // Protocol generator
+  // Protocol generator - Format: OC-YYYYMMDD (11 chars)
   const generateProtocol = (prefix: string = 'OC') => {
     const date = new Date();
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `${prefix}-${dateStr}-${random}`;
+    return `${prefix}-${dateStr}`;
   };
 
 
@@ -4413,9 +4412,9 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
           <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-slide-up max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className={`p-6 text-white ${selectedOccurrence.type === 'ride_issue' ? 'bg-red-600' :
-                selectedOccurrence.type === 'payment' ? 'bg-green-600' :
-                  selectedOccurrence.type === 'support_request' ? 'bg-blue-600' :
-                    'bg-yellow-600'
+              selectedOccurrence.type === 'payment' ? 'bg-green-600' :
+                selectedOccurrence.type === 'support_request' ? 'bg-blue-600' :
+                  'bg-yellow-600'
               }`}>
               <div className="flex items-start justify-between">
                 <div>
@@ -4432,9 +4431,9 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                     )}
                     {selectedOccurrence.priority && (
                       <span className={`px-2 py-1 rounded text-xs font-bold ${selectedOccurrence.priority === 'critical' ? 'bg-red-900 text-red-100' :
-                          selectedOccurrence.priority === 'high' ? 'bg-orange-900 text-orange-100' :
-                            selectedOccurrence.priority === 'medium' ? 'bg-yellow-900 text-yellow-100' :
-                              'bg-gray-700 text-gray-100'
+                        selectedOccurrence.priority === 'high' ? 'bg-orange-900 text-orange-100' :
+                          selectedOccurrence.priority === 'medium' ? 'bg-yellow-900 text-yellow-100' :
+                            'bg-gray-700 text-gray-100'
                         }`}>
                         {selectedOccurrence.priority === 'critical' ? '🔴 CRÍTICA' :
                           selectedOccurrence.priority === 'high' ? '🟠 ALTA' :
@@ -4522,8 +4521,8 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                         <div>
                           <p className="text-gray-500 text-xs uppercase font-bold mb-1">Status da Corrida</p>
                           <span className={`px-2 py-1 rounded text-xs font-bold ${relatedRide.status === 'completed' ? 'bg-green-100 text-green-700' :
-                              relatedRide.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                'bg-yellow-100 text-yellow-700'
+                            relatedRide.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
                             }`}>
                             {relatedRide.status === 'completed' ? 'Concluída' :
                               relatedRide.status === 'cancelled' ? 'Cancelada' :
