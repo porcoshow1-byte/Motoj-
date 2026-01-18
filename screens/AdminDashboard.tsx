@@ -3021,12 +3021,12 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     const newStatus = !occurrence.read;
-                                    setNotifications(prev => prev.map(n => n.id === occurrence.id ? { ...n, read: newStatus } : n));
-                                    await updateOccurrence(occurrence.id, { read: newStatus });
+                                    setNotifications(prev => prev.map(n => n.id === occurrence.id ? { ...n, read: newStatus, status: newStatus ? 'resolved' : 'pending' } : n));
+                                    await updateOccurrence(occurrence.id, { read: newStatus, status: newStatus ? 'resolved' : 'pending' });
                                   }}
                                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${occurrence.read ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                 >
-                                  {occurrence.read ? 'Marcar como não lida' : 'Marcar como lida'}
+                                  {occurrence.read ? 'Reabrir' : 'Resolver'}
                                 </button>
                                 <button
                                   className="px-3 py-1.5 text-xs font-medium bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg transition"
@@ -4492,13 +4492,13 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                       onClick={async () => {
                         const newStatus = !selectedOccurrence.read;
                         // Optimistic update
-                        setNotifications(notifications.map(n => n.id === selectedOccurrence.id ? { ...n, read: newStatus } : n));
-                        setSelectedOccurrence({ ...selectedOccurrence, read: newStatus });
+                        setNotifications(notifications.map(n => n.id === selectedOccurrence.id ? { ...n, read: newStatus, status: newStatus ? 'resolved' : 'pending' } : n));
+                        setSelectedOccurrence({ ...selectedOccurrence, read: newStatus, status: newStatus ? 'resolved' : 'pending' });
                         // Persist
-                        await updateOccurrence(selectedOccurrence.id, { read: newStatus });
+                        await updateOccurrence(selectedOccurrence.id, { read: newStatus, status: newStatus ? 'resolved' : 'pending' });
                       }}
                     >
-                      {selectedOccurrence.read ? 'Reabrir (Marcar Pendente)' : '✓ Marcar como Resolvido'}
+                      {selectedOccurrence.read ? 'Reabrir ocorrência' : '✓ Marcar como Resolvido'}
                     </Button>
                   </div>
 
