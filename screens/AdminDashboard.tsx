@@ -2812,7 +2812,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                       <AlertTriangle size={20} className="text-red-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'ride_issue').length}</p>
+                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'ride_issue' && !n.read).length}</p>
                       <p className="text-xs text-gray-500">Problemas em Corridas</p>
                     </div>
                   </div>
@@ -2823,7 +2823,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                       <Star size={20} className="text-yellow-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'feedback').length}</p>
+                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'feedback' && !n.read).length}</p>
                       <p className="text-xs text-gray-500">Avaliações Baixas</p>
                     </div>
                   </div>
@@ -2834,7 +2834,7 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                       <DollarSign size={20} className="text-green-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'payment').length}</p>
+                      <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.type === 'payment' && !n.read).length}</p>
                       <p className="text-xs text-gray-500">Pagamentos Pendentes</p>
                     </div>
                   </div>
@@ -2976,9 +2976,13 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                                   <h4 className={`font-bold ${!occurrence.read ? 'text-gray-900' : 'text-gray-700'}`}>
                                     {occurrence.title}
                                   </h4>
-                                  {!occurrence.read && (
-                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full">
-                                      NOVO
+                                  {occurrence.read ? (
+                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full border border-green-200">
+                                      RESOLVIDO
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full border border-orange-200">
+                                      PENDENTE
                                     </span>
                                   )}
                                 </div>
@@ -4482,15 +4486,20 @@ export const AdminDashboard = ({ onLogout }: { onLogout?: () => void }) => {
                       }`}>
                       {selectedOccurrence.read ? '✓ Resolvido' : '⏳ Pendente'}
                     </span>
-                    <button
-                      onClick={() => {
-                        setNotifications(notifications.map(n => n.id === selectedOccurrence.id ? { ...n, read: !n.read } : n));
-                        setSelectedOccurrence({ ...selectedOccurrence, read: !selectedOccurrence.read });
+                    <Button
+                      size="sm"
+                      variant={selectedOccurrence.read ? 'outline' : 'success'}
+                      onClick={async () => {
+                        const newStatus = !selectedOccurrence.read;
+                        // Optimistic update
+                        setNotifications(notifications.map(n => n.id === selectedOccurrence.id ? { ...n, read: newStatus } : n));
+                        setSelectedOccurrence({ ...selectedOccurrence, read: newStatus });
+                        // Persist
+                        await updateOccurrence(selectedOccurrence.id, { read: newStatus });
                       }}
-                      className="text-sm text-orange-600 hover:underline"
                     >
-                      {selectedOccurrence.read ? 'Marcar como Pendente' : 'Marcar como Resolvido'}
-                    </button>
+                      {selectedOccurrence.read ? 'Reabrir (Marcar Pendente)' : '✓ Marcar como Resolvido'}
+                    </Button>
                   </div>
 
                   {/* Description */}
