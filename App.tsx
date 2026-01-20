@@ -61,6 +61,34 @@ const Main = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // --- Global Session Monitor ---
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSession = async () => {
+      try {
+        const { validateSession } = await import('./services/user');
+        const isValid = await validateSession(user.uid);
+
+        if (!isValid) {
+          console.warn("Session invalidated. Logging out.");
+          await logout();
+          alert("Você foi desconectado pois sua conta foi acessada em outro dispositivo.");
+          setCurrentRole('landing');
+          window.location.href = '/';
+        }
+      } catch (e) {
+        console.error("Session check failed", e);
+      }
+    };
+
+    // Check immediately and then every 10 seconds
+    checkSession();
+    const interval = setInterval(checkSession, 10000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   // 1. Landing Page (Estado Inicial)
   if (currentRole === 'landing') {
     return <LandingPage onStartDemo={() => setCurrentRole('selection')} />;

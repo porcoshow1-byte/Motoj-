@@ -76,6 +76,7 @@ export interface Driver {
   verificationStatus?: 'pending' | 'approved' | 'rejected';
   totalRides?: number;
   email?: string;
+  cpf?: string; // Added for registration uniqueness check
   cnhUrl?: string;
   rejectionReason?: string;
 }

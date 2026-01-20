@@ -7,6 +7,7 @@ export const USERS_COLLECTION = 'users';
 interface InitialUserData {
   name?: string;
   phone?: string;
+  cpf?: string;
   vehicle?: string;
   plate?: string;
   cnhUrl?: string;
@@ -41,6 +42,7 @@ export const getOrCreateUserProfile = async (
       name: displayName,
       email: email,
       phone: initialData?.phone || '',
+      cpf: initialData?.cpf || '',
       rating: 5.0,
       avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
       createdAt: Date.now(),
@@ -94,6 +96,7 @@ export const getOrCreateUserProfile = async (
       name: displayName,
       email: email,
       phone: displayPhone,
+      cpf: initialData?.cpf || '',
       rating: 5.0,
       avatar: `https://ui-avatars.com/api/?background=${role === 'user' ? 'orange' : '000'}&color=fff&name=${displayName}`,
       createdAt: Date.now(),
