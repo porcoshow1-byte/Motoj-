@@ -99,8 +99,8 @@ export const Input = ({
   );
 };
 
-export const Card: React.FC<{ children?: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 ${className}`}>
+export const Card: React.FC<{ children?: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>> = ({ children, className = '', ...props }) => (
+  <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 ${className}`} {...props}>
     {children}
   </div>
 );

@@ -23,8 +23,7 @@ import { Driver, RideRequest, User, Occurrence } from '../types';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { APP_CONFIG } from '../constants';
 import { collection, getDocs, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../services/firebase';
+import { uploadFile } from '../services/storage';
 import { getSettings, saveSettings, subscribeToSettings, SystemSettings, DEFAULT_SETTINGS } from '../services/settings';
 import { sendEmail, testSMTPConnection } from '../services/email';
 import { formatCNPJ } from '../utils/formatters';
@@ -767,17 +766,20 @@ const CompanyFormModal = ({ company, onClose, onSave, onDelete, onNotify }: {
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) return onNotify('Tamanho Excedido', "Máximo 2MB", 'danger');
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setFormData(prev => ({ ...prev, logoUrl: base64 }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        // Upload to storage
+        // If we don't have a company ID yet (new company), use a generic temp path or timestamp
+        const companyId = company?.id || `new_company_${Date.now()}`;
+        const url = await uploadFile(file, `companies/${companyId}/logo_${Date.now()}`);
+        setFormData(prev => ({ ...prev, logoUrl: url }));
+      } catch (error) {
+        onNotify('Erro', 'Falha ao enviar logo.', 'danger');
+      }
     }
   };
 
@@ -4518,15 +4520,11 @@ const AdminDashboardContent = ({ onLogout }: { onLogout?: () => void }) => {
                                 // Try Firebase Storage first, fallback to Base64
                                 let finalUrl = compressedBase64;
 
-                                if (storage && !isMockMode) {
-                                  try {
-                                    toast.info("Enviando para a nuvem...", "Aguarde");
-                                    const storageRef = ref(storage, `settings/logo_${Date.now()}.png`);
-                                    await uploadBytes(storageRef, file);
-                                    finalUrl = await getDownloadURL(storageRef);
-                                  } catch (storageErr) {
-                                    console.warn("Firebase Storage falhou (CORS), usando imagem comprimida:", storageErr);
-                                  }
+                                try {
+                                  toast.info("Enviando para a nuvem...", "Aguarde");
+                                  finalUrl = await uploadFile(file, `settings/logo_${Date.now()}.png`);
+                                } catch (storageErr) {
+                                  console.warn("Firebase Storage falhou, usando imagem comprimida:", storageErr);
                                 }
 
                                 setSettings({
@@ -4639,15 +4637,11 @@ const AdminDashboardContent = ({ onLogout }: { onLogout?: () => void }) => {
                                 // Try Firebase Storage first, fallback to Base64
                                 let finalUrl = compressedBase64;
 
-                                if (storage && !isMockMode) {
-                                  try {
-                                    toast.info("Enviando para a nuvem...", "Aguarde");
-                                    const storageRef = ref(storage, `settings/login_bg_${Date.now()}.jpg`);
-                                    await uploadBytes(storageRef, file);
-                                    finalUrl = await getDownloadURL(storageRef);
-                                  } catch (storageErr) {
-                                    console.warn("Firebase Storage falhou (CORS), usando imagem comprimida:", storageErr);
-                                  }
+                                try {
+                                  toast.info("Enviando para a nuvem...", "Aguarde");
+                                  finalUrl = await uploadFile(file, `settings/login_bg_${Date.now()}.jpg`);
+                                } catch (storageErr) {
+                                  console.warn("Firebase Storage falhou, usando imagem comprimida:", storageErr);
                                 }
 
                                 setSettings({
@@ -4764,15 +4758,11 @@ const AdminDashboardContent = ({ onLogout }: { onLogout?: () => void }) => {
                                 // Try Firebase Storage first, fallback to Base64
                                 let finalUrl = compressedBase64;
 
-                                if (storage && !isMockMode) {
-                                  try {
-                                    toast.info("Enviando para a nuvem...", "Aguarde");
-                                    const storageRef = ref(storage, `settings/mobile_bg_${Date.now()}.jpg`);
-                                    await uploadBytes(storageRef, file);
-                                    finalUrl = await getDownloadURL(storageRef);
-                                  } catch (storageErr) {
-                                    console.warn("Firebase Storage falhou (CORS), usando imagem comprimida:", storageErr);
-                                  }
+                                try {
+                                  toast.info("Enviando para a nuvem...", "Aguarde");
+                                  finalUrl = await uploadFile(file, `settings/mobile_bg_${Date.now()}.jpg`);
+                                } catch (storageErr) {
+                                  console.warn("Firebase Storage falhou, usando imagem comprimida:", storageErr);
                                 }
 
                                 setSettings({
@@ -4919,6 +4909,44 @@ const AdminDashboardContent = ({ onLogout }: { onLogout?: () => void }) => {
                         placeholder="0"
                         icon={<span className="text-gray-400 text-sm">%</span>}
                       />
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Delivery Moto Pricing */}
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                      <Package className="text-blue-600" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Preços: Moto entregas</h3>
+                      <p className="text-sm text-gray-500">Configuração para entrega de pacotes</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Preço Base (R$)</label>
+                        <Input
+                          type="number"
+                          value={settings.deliveryMotoBasePrice || 6.00}
+                          onChange={(e) => setSettings({ ...settings, deliveryMotoBasePrice: parseFloat(e.target.value) })}
+                          placeholder="0.00"
+                          icon={<span className="text-gray-400 text-sm">R$</span>}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Preço por KM (R$)</label>
+                        <Input
+                          type="number"
+                          value={settings.deliveryMotoPricePerKm || 2.20}
+                          onChange={(e) => setSettings({ ...settings, deliveryMotoPricePerKm: parseFloat(e.target.value) })}
+                          placeholder="0.00"
+                          icon={<span className="text-gray-400 text-sm">R$</span>}
+                        />
+                      </div>
                     </div>
                   </div>
                 </Card>

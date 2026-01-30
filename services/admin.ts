@@ -75,6 +75,20 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       }
     }
 
+    // Fetch REAL passengers from localStorage
+    const realPassengers: User[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('motoja_user_')) {
+        try {
+          const userData = JSON.parse(localStorage.getItem(key) || '{}');
+          if (userData.role === 'user') {
+            realPassengers.push(userData as User);
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
     // Fallback mock drivers if no real ones exist
     const mockDrivers: Driver[] = realDrivers.length > 0 ? realDrivers : [
       { ...MOCK_DRIVER, id: 'd1', name: 'Carlos Oliveira', status: 'online', location: { lat: -23.1047, lng: -48.9213 }, vehicle: 'Honda CG 160', phone: '(14) 99123-4567' },
@@ -82,7 +96,7 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       { ...MOCK_DRIVER, id: 'd3', name: 'Ana Pereira', status: 'offline', location: { lat: -23.1025, lng: -48.9180 }, vehicle: 'Bike Caloi', phone: '(14) 99345-6789' },
     ];
 
-    const mockPassengers: User[] = [
+    const mockPassengers: User[] = realPassengers.length > 0 ? realPassengers : [
       { id: 'u1', name: 'João Silva', phone: '(11) 91234-5678', rating: 4.8, avatar: '', walletBalance: 25.50, isBlocked: false, email: 'joao.silva@email.com', address: 'Rua das Flores, 123 - Centro', totalRides: 15, type: 'passenger' },
       { id: 'u2', name: 'Maria Oliveira', phone: '(11) 98765-4321', rating: 4.9, avatar: '', walletBalance: 0, isBlocked: false, email: 'maria.oli@email.com', address: 'Av. Paulista, 1000 - Bela Vista', totalRides: 8, type: 'passenger' },
       { id: 'u3', name: 'Pedro Santos', phone: '(11) 95555-4444', rating: 4.5, avatar: '', walletBalance: 100.00, isBlocked: true, email: 'pedro.santos@email.com', address: 'Rua Augusta, 500 - Consolação', totalRides: 5, type: 'passenger' }

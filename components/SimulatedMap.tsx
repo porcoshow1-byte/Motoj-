@@ -1,44 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker as GoogleMarker, DirectionsRenderer } from '@react-google-maps/api';
-import { MapContainer, TileLayer, Marker as LeafletMarker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import Map, { Marker as MapboxMarker, Source, Layer, MapRef } from 'react-map-gl/mapbox';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 import { APP_CONFIG } from '../constants';
 import { Coords, Driver } from '../types';
-import { Loader2, AlertTriangle, Leaf } from 'lucide-react';
+import { Loader2, AlertTriangle, Leaf, Flag, MapPin, Pencil, Clock } from 'lucide-react';
 
-// Fix for Leaflet default icons in Webpacking
-import iconMarker from 'leaflet/dist/images/marker-icon.png';
-import iconRetina from 'leaflet/dist/images/marker-icon-2x.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-const DefaultIcon = L.icon({
-  iconUrl: iconMarker,
-  iconRetinaUrl: iconRetina,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
-
-// Custom Icons for Leaflet
-const driverIcon = L.divIcon({
-  html: '<div style="background-color: #16a34a; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>',
-  className: 'custom-driver-icon',
-  iconSize: [12, 12],
-  iconAnchor: [6, 6]
-});
-
-const userIcon = L.divIcon({
-  html: '<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>',
-  className: 'custom-user-icon',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8]
-});
 
 
 // Fix for Google Maps types when @types/google.maps is not installed
@@ -61,7 +30,14 @@ interface MapProps {
   driverLocation?: Coords | null;
   drivers?: Driver[];
   recenterTrigger?: number;
-  onCameraChange?: (coords: Coords) => void;
+  onCameraChange?: (coords: Coords, isUserInteraction?: boolean) => void;
+  fitBoundsPadding?: { top: number; bottom: number; left: number; right: number };
+  // New Props for Custom Markers
+  originAddress?: string;
+  destinationAddress?: string;
+  tripProfile?: { distance: string; duration: string };
+  onEditOrigin?: () => void;
+  onEditDestination?: () => void;
 }
 
 const mapContainerStyle = {
@@ -77,97 +53,268 @@ const defaultCenter = {
 
 // --- LEAFLET COMPONENT (FREE / OPTIMIZED) ---
 
-// --- LEAFLET COMPONENT (FREE / OPTIMIZED) ---
 
-const LeafletMapInner: React.FC<MapProps> = ({ showDriver, showRoute, origin, destination, driverLocation, drivers, waypoints, recenterTrigger, onCameraChange }) => {
-  const map = useMap();
 
-  useMapEvents({
-    moveend: () => {
-      if (onCameraChange) {
-        const center = map.getCenter();
-        onCameraChange({ lat: center.lat, lng: center.lng });
-      }
-    }
+const MapboxMapInner: React.FC<MapProps> = (props) => {
+  const {
+    showDriver, showRoute, origin, destination, driverLocation, drivers, waypoints,
+    recenterTrigger, onCameraChange, fitBoundsPadding,
+    originAddress, destinationAddress, tripProfile,
+    onEditOrigin, onEditDestination
+  } = props;
+  const mapRef = useRef<MapRef>(null);
+  const [routeGeoJSON, setRouteGeoJSON] = useState<any>(null);
+  const [viewState, setViewState] = useState({
+    longitude: defaultCenter.lng,
+    latitude: defaultCenter.lat,
+    zoom: 14
   });
 
-  // Auto-fit bounds
-  useEffect(() => {
-    if (!map) return;
-    const bounds = L.latLngBounds([]);
-    let hasPoints = false;
+  const mapboxToken = APP_CONFIG.mapboxToken;
 
-    if (origin) { bounds.extend([origin.lat, origin.lng]); hasPoints = true; }
-    if (destination) { bounds.extend([destination.lat, destination.lng]); hasPoints = true; }
-    if (driverLocation && showDriver) { bounds.extend([driverLocation.lat, driverLocation.lng]); hasPoints = true; }
-    if (drivers) {
-      drivers.forEach(d => {
-        if (d.location && d.location.lat !== 0) {
-          bounds.extend([d.location.lat, d.location.lng]);
-          hasPoints = true;
-        }
-      });
+  // Memoize padding to prevent fitBounds regeneration on every render
+  const safePadding = React.useMemo(() => {
+    return fitBoundsPadding ?
+      { top: fitBoundsPadding.top, bottom: fitBoundsPadding.bottom, left: fitBoundsPadding.left, right: fitBoundsPadding.right } :
+      undefined;
+  }, [fitBoundsPadding?.top, fitBoundsPadding?.bottom, fitBoundsPadding?.left, fitBoundsPadding?.right]);
+
+  // Use Refs to access latest props in fitBounds without forcing re-renders/dep-changes
+  const propsRef = useRef(props);
+  useEffect(() => { propsRef.current = props; });
+
+  // Helper function to fit bounds - READS FROM REF
+  const fitBounds = useCallback((mapInstance: any) => {
+    if (!mapInstance) return;
+
+    const { origin, destination, driverLocation, showDriver, waypoints } = propsRef.current;
+
+    const points: Coords[] = [];
+    if (origin) points.push(origin);
+    if (destination) points.push(destination);
+    if (driverLocation && showDriver) points.push(driverLocation);
+    if (waypoints) points.push(...waypoints);
+
+    if (points.length > 0) {
+      // Define padding logic first to use in both cases
+      // Use provided padding or default
+      const defaultPadding = showRoute
+        ? { top: 120, bottom: 550, left: 60, right: 60 }
+        : { top: 300, bottom: 300, left: 40, right: 40 };
+
+      // Use efficient padding check to avoid dependency churn
+      const p = fitBoundsPadding || defaultPadding;
+      const padding = { top: p.top, bottom: p.bottom, left: p.left, right: p.right };
+
+      if (points.length === 1) {
+        mapInstance.flyTo({
+          center: [points[0].lng, points[0].lat],
+          zoom: 15.5,
+          padding: padding
+        });
+      } else {
+        const minLng = Math.min(...points.map(p => p.lng));
+        const maxLng = Math.max(...points.map(p => p.lng));
+        const minLat = Math.min(...points.map(p => p.lat));
+        const maxLat = Math.max(...points.map(p => p.lat));
+
+        mapInstance.resize();
+
+        mapInstance.fitBounds(
+          [[minLng, minLat], [maxLng, maxLat]],
+          { padding: padding, duration: 1500, maxZoom: 16 }
+        );
+      }
     }
+  }, [safePadding, showRoute]); // Only recreate if padding mode or route mode changes
 
-    if (hasPoints) {
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [map, origin, destination, driverLocation, drivers, showDriver]);
-
-  // Decoding simple OSRM geometry (if we had the polyline string). 
-  // Since we don't have the polyline string from the service yet (we only got distance/duration),
-  // we will draw a straight line for now or we would need to fetch the route geometry again here.
-  // Optimization: Draw simple straight line for visual feedback if route data missing, 
-  // OR fetch OSRM route geometry here for display.
-
-  const [routePositions, setRoutePositions] = useState<[number, number][]>([]);
-
+  // Trigger fitBounds ONLY when specific triggers change
   useEffect(() => {
-    if (showRoute && origin && destination) {
-      // Fetch geometry for display
+    if (mapRef.current) {
+      fitBounds(mapRef.current);
+    }
+  }, [recenterTrigger, showRoute, fitBounds]); // Only re-fit on explicit trigger or route visibility toggle
+
+  // Fetch Route from Mapbox Directions API
+  useEffect(() => {
+    if (showRoute && origin && destination && mapboxToken) {
       const fetchRoute = async () => {
         try {
-          const url = `http://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+          const points: Coords[] = [];
+          if (origin) points.push(origin);
+          if (waypoints) points.push(...waypoints);
+          if (destination) points.push(destination);
+
+          if (points.length < 2) return;
+
+          const coordinates = points.map(p => `${p.lng},${p.lat}`).join(';');
+          const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full&access_token=${mapboxToken}`;
+
           const res = await fetch(url);
           const data = await res.json();
+
           if (data.routes && data.routes[0]) {
-            const coords = data.routes[0].geometry.coordinates; // [lon, lat]
-            setRoutePositions(coords.map((c: any) => [c[1], c[0]])); // Convert to [lat, lon]
+            setRouteGeoJSON({
+              type: 'Feature',
+              properties: {},
+              geometry: data.routes[0].geometry
+            });
           }
-        } catch (e) { console.warn("Erro rota leaflet", e); }
+        } catch (e) { console.warn("Erro rota mapbox", e); }
       };
       fetchRoute();
     } else {
-      setRoutePositions([]);
+      setRouteGeoJSON(null);
     }
-  }, [showRoute, origin, destination]);
+  }, [showRoute, origin, destination, waypoints, mapboxToken]);
+
+  if (!mapboxToken) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-100 text-gray-500 flex-col p-4 text-center">
+        <AlertTriangle size={32} className="mb-2 text-yellow-500" />
+        <p className="font-bold">Mapbox Token Não Configurado</p>
+        <p className="text-sm">Adicione VITE_MAPBOX_TOKEN ao .env</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {origin && !drivers && (
-        <LeafletMarker position={[origin.lat, origin.lng]} icon={userIcon} />
+    <Map
+      ref={mapRef}
+      onLoad={(e) => {
+        // Trigger fitbounds immediately on load
+        fitBounds(e.target);
+      }}
+      initialViewState={viewState}
+      onMove={evt => setViewState(evt.viewState)}
+      onMoveEnd={(evt) => {
+        // Check if move was caused by user interaction (drag/zoom) vs flyTo/fitBounds
+        // Mapbox doesn't give a direct flag in the event object for "isUserInteraction" easily in this wrapper, 
+        // but typically onMoveEnd comes from user or animation. 
+        // We will assume true here for now as most 'end' events are user-driven or we can filter by event originalEvent.
+        const isUser = evt.originalEvent !== undefined;
+        if (onCameraChange) onCameraChange({ lat: viewState.latitude, lng: viewState.longitude }, isUser);
+      }}
+      style={{ width: '100%', height: '100%' }}
+      mapStyle="mapbox://styles/mapbox/streets-v12"
+      mapboxAccessToken={mapboxToken}
+    >
+      {origin && (
+        <MapboxMarker longitude={origin.lng} latitude={origin.lat} anchor="bottom">
+          <div className="relative flex flex-col items-center group z-20">
+            {/* Address Bubble - ONLY show if we have an address string and NOT just 'Localizando...' */}
+            {originAddress && originAddress !== 'Localizando...' && originAddress !== 'Atualizando GPS...' ? (
+              <div
+                className="absolute bottom-full mb-3 flex flex-col items-center cursor-pointer pointer-events-auto hover:scale-105 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onEditOrigin) onEditOrigin();
+                }}
+              >
+                <div className="bg-white rounded-xl shadow-xl py-2 px-3 flex items-center gap-3 whitespace-nowrap border border-gray-100 min-w-[140px] max-w-[220px]">
+                  <span className="text-sm font-semibold text-gray-800 truncate max-w-[180px]">{originAddress}</span>
+                  <Pencil size={12} className="text-gray-400 shrink-0" />
+                </div>
+                <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white relative -mt-[1px] drop-shadow-sm"></div>
+              </div>
+            ) : null}
+
+            {/* Marker Dot - Reverted to Orange Pulsing as requested */}
+            <div className="relative flex items-center justify-center">
+              <div className="w-5 h-5 rounded-full bg-orange-500 border-[3px] border-white shadow-lg z-10 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+              </div>
+              {/* Always pulse for current location/origin */}
+              <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-60 z-0"></div>
+            </div>
+          </div>
+        </MapboxMarker>
       )}
+
       {destination && showRoute && (
-        <LeafletMarker position={[destination.lat, destination.lng]} />
+        <MapboxMarker longitude={destination.lng} latitude={destination.lat} anchor="bottom">
+          <div className="relative flex flex-col items-center group z-30">
+            {/* Destination Bubble with Stats - Matching Competitor Exactly */}
+            <div
+              className="absolute bottom-full mb-4 flex flex-col items-center z-50 pointer-events-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onEditDestination) onEditDestination();
+              }}
+            >
+              <div className="bg-white rounded-lg shadow-xl overflow-hidden min-w-[140px] max-w-[200px] border border-gray-200">
+                {/* Header: Address + Pencil */}
+                <div className="py-2 px-3 flex items-center justify-between gap-2 bg-white">
+                  <span className="text-sm font-bold text-gray-800 truncate leading-tight">
+                    {/* Format address to "Street, Number" style if possible */}
+                    {destinationAddress ? (() => {
+                      const parts = destinationAddress.split(',');
+                      if (parts.length >= 2) return `${parts[0]},${parts[1]}`;
+                      return destinationAddress;
+                    })() : 'Destino'}
+                  </span>
+                  <Pencil size={12} className="text-gray-400 shrink-0" />
+                </div>
+
+                {/* Footer: Stats (Dark Background) */}
+                {tripProfile && (
+                  <div className="bg-slate-800 text-white text-xs font-bold py-1.5 px-3 flex items-center justify-center gap-2">
+                    <span>{tripProfile.distance}</span>
+                    <span className="text-slate-500">•</span>
+                    <span>{tripProfile.duration}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Pointer Arrow - Dark Color to match footer */}
+              <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-800 -mt-[1px] drop-shadow-sm"></div>
+            </div>
+
+            {/* Flag Marker - Purple/Orange Circle */}
+            <div className="w-9 h-9 bg-orange-500 rounded-full border-[3px] border-white shadow-xl flex items-center justify-center">
+              <Flag size={16} className="text-white fill-white" />
+            </div>
+          </div>
+        </MapboxMarker>
       )}
+
+      {/* Numbered Waypoints Markers */}
+      {waypoints && showRoute && waypoints.map((waypoint, index) => (
+        <MapboxMarker key={`waypoint-${index}`} longitude={waypoint.lng} latitude={waypoint.lat} anchor="bottom">
+          <div className="relative flex items-center justify-center">
+            <div className="w-6 h-6 bg-white rounded-full border-2 border-orange-500 flex items-center justify-center shadow-md z-10">
+              <span className="text-orange-600 font-bold text-xs">{index + 1}</span>
+            </div>
+            <div className="absolute top-5 w-0.5 h-2 bg-orange-500"></div>
+          </div>
+        </MapboxMarker>
+      ))}
+
       {showDriver && driverLocation && !drivers && (
-        <LeafletMarker position={[driverLocation.lat, driverLocation.lng]} icon={driverIcon} />
+        <MapboxMarker longitude={driverLocation.lng} latitude={driverLocation.lat}>
+          <div className="bg-green-500 w-4 h-4 rounded-full border-2 border-white shadow-md"></div>
+        </MapboxMarker>
       )}
+
       {drivers && drivers.map(d => (
-        d.location && d.location.lat !== 0 && (
-          <LeafletMarker key={d.id} position={[d.location.lat, d.location.lng]} icon={driverIcon}>
-            <Popup>{d.name} - {d.status}</Popup>
-          </LeafletMarker>
+        d.location && (
+          <MapboxMarker key={d.id} longitude={d.location.lng} latitude={d.location.lat}>
+            <div className="bg-green-600 w-3 h-3 rounded-full border border-white shadow-sm"></div>
+          </MapboxMarker>
         )
       ))}
-      {routePositions.length > 0 && (
-        <Polyline positions={routePositions} color="#f97316" weight={5} />
+
+      {routeGeoJSON && (
+        <Source id="route" type="geojson" data={routeGeoJSON}>
+          <Layer
+            id="route-line"
+            type="line"
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{ "line-color": "#f97316", "line-width": 5, "line-opacity": 0.8 }}
+          />
+        </Source>
       )}
-    </>
+    </Map>
   );
 };
 
@@ -262,11 +409,11 @@ const GOOGLE_MAP_STYLES = [
 
 // ... (LeafletMapInner remains the same)
 
-const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, origin, destination, driverLocation, drivers, waypoints, recenterTrigger, onCameraChange }) => {
+const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, origin, destination, driverLocation, drivers, waypoints, recenterTrigger, onCameraChange, fitBoundsPadding }) => {
   const [map, setMap] = useState<any | null>(null);
   const [directionsResponse, setDirectionsResponse] = useState<any | null>(null);
 
-  // Estado para animação suave do marcador do motorista
+  // ... (keep state) ...
   const [animatedDriverLocation, setAnimatedDriverLocation] = useState<Coords | null>(null);
   const [driverRotation, setDriverRotation] = useState(0);
   const prevDriverLocationRef = useRef<Coords | null>(null);
@@ -278,6 +425,74 @@ const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, ori
   const onUnmount = useCallback(() => {
     setMap(null);
   }, []);
+
+  // ... (keep route calculation useEffect) ...
+
+  // ... (keep driver animation useEffect) ...
+
+  // Ajustar Zoom e Centralização
+  useEffect(() => {
+    if (!map) return;
+
+    // Trigger resize to ensure map knows its dimensions
+    window.google.maps.event.trigger(map, "resize");
+
+    // Force aggressive padding
+    const defaultPadding = { top: 150, right: 80, bottom: 600, left: 80 };
+    const padding = fitBoundsPadding || defaultPadding;
+
+    if (drivers && drivers.length > 0) {
+      // Modo Admin: Fit bounds para todos os motoristas
+      const bounds = new window.google.maps.LatLngBounds();
+      let hasValidLoc = false;
+      drivers.forEach(d => {
+        if (d.location && d.location.lat !== 0) {
+          bounds.extend(d.location);
+          hasValidLoc = true;
+        }
+      });
+      if (hasValidLoc) {
+        map.fitBounds(bounds, padding);
+      } else {
+        map.panTo(defaultCenter);
+        map.setZoom(13);
+      }
+    } else if (showDriver && driverLocation) {
+      // Driver Mode: Follow Driver
+      map.panTo(driverLocation);
+      map.setZoom(16);
+    } else if (origin && destination) {
+      // Fit bounds to include Origin + Destination (and Waypoints)
+      const bounds = new window.google.maps.LatLngBounds();
+      bounds.extend(origin);
+      bounds.extend(destination);
+      if (waypoints) waypoints.forEach(p => bounds.extend(p));
+
+      // --- ALGORITMO DE VISUALIZAÇÃO SEGURA (SAFE VIEW) ---
+      // Em vez de confiar apenas no padding do Google (que pode falhar em containers pequenos),
+      // nós expandimos a área da rota matematicamente.
+
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const latSpan = ne.lat() - sw.lat();
+      const lngSpan = ne.lng() - sw.lng();
+
+      // Adicionamos 30% de margem extra em todas as direções
+      // Isso força o mapa a dar um "Zoom Out" garantido
+      const expandedBounds = new window.google.maps.LatLngBounds(
+        { lat: sw.lat() - (latSpan * 0.30), lng: sw.lng() - (lngSpan * 0.30) },
+        { lat: ne.lat() + (latSpan * 0.30), lng: ne.lng() + (lngSpan * 0.30) }
+      );
+
+      // Fix: Respect the passed padding!
+      map.fitBounds(expandedBounds, fitBoundsPadding || 0);
+
+    } else if (origin && !destination && !showRoute) {
+      // Modo Acompanhar Usuário (Home) - Força recentralizar se trigger mudar
+      map.panTo(origin);
+      map.setZoom(15);
+    }
+  }, [map, origin, destination, showRoute, drivers, driverLocation, showDriver, recenterTrigger, fitBoundsPadding, waypoints]);
 
   // Calcular Rota
   useEffect(() => {
@@ -365,36 +580,7 @@ const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, ori
     prevDriverLocationRef.current = driverLocation;
   }, [driverLocation]);
 
-  // Ajustar Zoom e Centralização
-  useEffect(() => {
-    if (!map) return;
 
-    if (drivers && drivers.length > 0) {
-      // Modo Admin: Fit bounds para todos os motoristas
-      const bounds = new window.google.maps.LatLngBounds();
-      let hasValidLoc = false;
-      drivers.forEach(d => {
-        if (d.location && d.location.lat !== 0) {
-          bounds.extend(d.location);
-          hasValidLoc = true;
-        }
-      });
-      if (hasValidLoc) {
-        map.fitBounds(bounds);
-      } else {
-        map.panTo(defaultCenter);
-        map.setZoom(13);
-      }
-    } else if (showDriver && driverLocation) {
-      // Driver Mode: Follow Driver
-      map.panTo(driverLocation);
-      map.setZoom(16);
-    } else if (origin && !destination && !showRoute) {
-      // Modo Acompanhar Usuário (Home) - Força recentralizar se trigger mudar
-      map.panTo(origin);
-      map.setZoom(15);
-    }
-  }, [map, origin, destination, showRoute, drivers, driverLocation, showDriver, recenterTrigger]);
 
   return (
     <GoogleMap
@@ -402,17 +588,24 @@ const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, ori
       center={origin || defaultCenter}
       zoom={14}
       onLoad={onLoad}
+      onZoomChanged={() => {
+        if (map && onCameraChange) {
+          const c = map.getCenter();
+          // Zoom is also a user interaction
+          onCameraChange({ lat: c.lat(), lng: c.lng() }, true);
+        }
+      }}
       onUnmount={onUnmount}
       onDragEnd={() => {
         if (map && onCameraChange) {
           const c = map.getCenter();
-          onCameraChange({ lat: c.lat(), lng: c.lng() });
+          onCameraChange({ lat: c.lat(), lng: c.lng() }, true);
         }
       }}
       onIdle={() => {
         if (map && onCameraChange) {
           const c = map.getCenter();
-          onCameraChange({ lat: c.lat(), lng: c.lng() });
+          onCameraChange({ lat: c.lat(), lng: c.lng() }, false);
         }
       }}
       options={{
@@ -485,6 +678,7 @@ const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, ori
           directions={directionsResponse}
           options={{
             suppressMarkers: true,
+            preserveViewport: true,
             polylineOptions: {
               strokeColor: "#f97316",
               strokeWeight: 5
@@ -498,13 +692,16 @@ const GoogleMapInner: React.FC<MapProps> = ({ showDriver, showRoute, status, ori
 
 
 // Componente Principal que gerencia o carregamento da API
+// Componente Principal que gerencia o carregamento da API e Escolha Visual
 export const SimulatedMap: React.FC<MapProps> = (props) => {
   const apiKey = APP_CONFIG.googleMapsApiKey;
+  const mapboxToken = APP_CONFIG.mapboxToken;
 
-  // Use Leaflet by default is FALSE now, to show Google Map style requested by user
-  // If API key is missing, it will fallback to Leaflet automatically below.
-  const [useLeaflet, setUseLeaflet] = useState(false);
+  // Use Leaflet by default is FALSE now. We prioritize Mapbox.
 
+  // Load Google API for Services support (Hybrid Plan: usage for Price/Distance/Places)
+  // Even if we don't render <GoogleMap>, we might need the script loaded for 'window.google.maps' 
+  // usage in services/map.ts if that service checks 'window.google'.
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: apiKey || '',
@@ -512,20 +709,34 @@ export const SimulatedMap: React.FC<MapProps> = (props) => {
     libraries: libraries
   });
 
-  // Se não tiver API Key, forçamos Leaflet
-  useEffect(() => {
-    if (!apiKey) setUseLeaflet(true);
-  }, [apiKey]);
-
-
-  if (useLeaflet) {
+  // 1. Mapbox Visualization (Preferred by User)
+  if (mapboxToken) {
     return (
       <div className="relative w-full h-full animate-fade-in bg-gray-100 z-0">
-        <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={13} style={mapContainerStyle} zoomControl={false}>
-          <LeafletMapInner {...props} />
-        </MapContainer>
+        <MapboxMapInner {...props} />
 
-        {/* Status Badge Overlay */}
+        {/* Status Badge */}
+        {props.status && (
+          <div className="absolute top-12 left-4 right-4 z-10" style={{ pointerEvents: 'none' }}>
+            <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-sm border-l-4 border-orange-500 text-sm font-medium text-gray-800 inline-block pointer-events-auto">
+              {props.status}
+            </div>
+          </div>
+        )}
+        <div className="absolute bottom-1 right-1 z-[400] bg-white/80 px-1 rounded text-[10px] text-gray-500">
+          Mapbox GL JS
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Google Maps Fallback (if no Mapbox Token)
+  // Only shows if API Key is valid and loaded.
+  if (apiKey && isLoaded && !loadError) {
+    return (
+      <div className="relative w-full h-full animate-fade-in bg-gray-100 z-0">
+        <GoogleMapInner {...props} />
+
         {props.status && (
           <div className="absolute top-12 left-4 right-4 z-[400]" style={{ pointerEvents: 'none' }}>
             <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-sm border-l-4 border-orange-500 text-sm font-medium text-gray-800 inline-block pointer-events-auto">
@@ -533,46 +744,15 @@ export const SimulatedMap: React.FC<MapProps> = (props) => {
             </div>
           </div>
         )}
-
-        <div className="absolute bottom-1 right-1 z-[400] bg-white/80 px-1 rounded text-[10px] text-gray-500">
-          OpenStreetMap (Free)
-        </div>
-      </div>
-    )
-  }
-  // ...
-
-  // Fallback to Google Maps if Leaflet disabled
-  if (loadError) {
-    return (
-      <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-red-500">
-        <AlertTriangle size={32} className="mb-2" />
-        <p>Erro ao carregar Google Maps API.</p>
-        <button onClick={() => setUseLeaflet(true)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Usar Mapa Alternativo</button>
       </div>
     );
   }
 
-  if (!isLoaded) {
-    return (
-      <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-orange-500">
-        <Loader2 size={32} className="animate-spin mb-2" />
-        <p className="text-sm font-medium">Carregando Mapa...</p>
-      </div>
-    );
-  }
-
+  // 3. Error State (No Mapbox, No Google)
   return (
-    <div className="relative w-full h-full animate-fade-in">
-      <GoogleMapInner {...props} />
-
-      {props.status && (
-        <div className="absolute top-12 left-4 right-4 z-30">
-          <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-sm border-l-4 border-orange-500 text-sm font-medium text-gray-800">
-            {props.status}
-          </div>
-        </div>
-      )}
+    <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+      <p className="font-bold text-gray-800">Mapa não configurado</p>
+      <p className="text-sm">Configure VITE_MAPBOX_TOKEN (preferido) ou API Google no .env</p>
     </div>
   );
 };

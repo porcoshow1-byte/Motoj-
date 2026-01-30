@@ -71,7 +71,7 @@ export const useToast = () => {
     return context;
 };
 
-const ToastItem = ({ toast, onRemove }: { toast: Toast; onRemove: () => void }) => {
+export const ToastItem = ({ toast, onRemove }: { toast: Toast; onRemove: () => void }) => {
     const [isExiting, setIsExiting] = useState(false);
 
     const handleRemove = () => {

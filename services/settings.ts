@@ -45,6 +45,10 @@ export interface SystemSettings {
     bikeMaxDistance: number;
     bikePlatformFee: number;
 
+    // Delivery Moto Pricing
+    deliveryMotoBasePrice: number;
+    deliveryMotoPricePerKm: number;
+
     // Company Info
     appName: string;
     supportPhone: string;
@@ -82,6 +86,9 @@ export const DEFAULT_SETTINGS: SystemSettings = {
     bikePricePerKm: 1.50,
     bikeMaxDistance: 5,
     bikePlatformFee: 15,
+
+    deliveryMotoBasePrice: 6.00,
+    deliveryMotoPricePerKm: 2.20,
 
     appName: 'MotoJá',
     supportPhone: '(11) 99999-9999',

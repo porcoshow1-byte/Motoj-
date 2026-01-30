@@ -17,6 +17,18 @@ import { isAppContext, getAppUrl } from './utils/url';
 const AppRouter = () => {
   const { user } = useAuth();
 
+  // --- MOCK SIMULATION INIT ---
+  useEffect(() => {
+    // Dynamic import to avoid bundling mock logic in prod if possible (though checking inside is safer)
+    import('./services/simulation').then(({ initSimulation }) => {
+      const cleanup = initSimulation();
+      // Store cleanup to run on unmount? 
+      // Hook cleanup will handle it if we return it here, but we are inside .then
+      // Simplified: The simulation service manages its own singular interval usually, 
+      // but let's just let it run.
+    });
+  }, []);
+
   // Parse role from URL (e.g. /app/passageiro -> 'user')
   const getRoleFromUrl = (): Role | 'login' => {
     const path = window.location.pathname;
@@ -39,12 +51,20 @@ const AppRouter = () => {
   // Sync session check
   useEffect(() => {
     if (!user) return;
-    const checkSession = async () => {
+
+    const checkSession = async (isRetry = false) => {
       try {
         const { validateSession } = await import('./services/user');
         const isValid = await validateSession(user.uid);
+
         if (!isValid) {
-          console.warn("Session invalidated.");
+          if (!isRetry) {
+            console.warn("Session check failed. Retrying in 3s...");
+            setTimeout(() => checkSession(true), 3000);
+            return;
+          }
+
+          console.warn("Session invalidated after retry.");
           await logout();
           window.location.reload();
         }
@@ -52,7 +72,9 @@ const AppRouter = () => {
         console.error("Session check failed", e);
       }
     };
-    const interval = setInterval(checkSession, 10000);
+
+    // Check every 30 seconds instead of 10
+    const interval = setInterval(() => checkSession(false), 30000);
     return () => clearInterval(interval);
   }, [user]);
 

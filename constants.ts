@@ -25,12 +25,21 @@ if (!googleKey) {
   console.warn("⚠️ Chave do Google Maps (VITE_GOOGLE_MAPS_API_KEY) não encontrada. O mapa pode não carregar corretamente.");
 }
 
+// Mapbox Token
+const mapboxEnvKey = getEnvVar('VITE_MAPBOX_TOKEN');
+const mapboxKey = mapboxEnvKey || '';
+
+if (!mapboxKey) {
+  console.warn("⚠️ Token do Mapbox (VITE_MAPBOX_TOKEN) não encontrado. O mapa precisará de configuração.");
+}
+
 export const APP_CONFIG = {
   name: "MotoJá",
   city: "Avaré - SP",
   currency: "R$",
   primaryColor: "orange",
-  googleMapsApiKey: googleKey
+  googleMapsApiKey: googleKey,
+  mapboxToken: mapboxKey
 };
 
 export const MOCK_USER: User = {
@@ -60,24 +69,27 @@ export const SERVICES = [
     name: 'Mototáxi',
     description: 'Rápido e econômico',
     icon: 'passenger',
+    image: '/icons/mototaxi.png',
     category: 'ride',
     basePrice: 5.00,
     pricePerKm: 2.00
   },
   {
     id: ServiceType.DELIVERY_MOTO,
-    name: 'Entrega Moto',
+    name: 'Moto entregas',
     description: 'Pacotes pequenos e médios',
     icon: 'package',
+    image: '/icons/delivery_moto.png',
     category: 'delivery',
     basePrice: 6.00,
     pricePerKm: 2.20
   },
   {
     id: ServiceType.DELIVERY_BIKE,
-    name: 'Entrega Bike',
+    name: 'Bike entregas',
     description: 'Ecológico para curta distância',
     icon: 'bike',
+    image: '/icons/delivery_bike.png',
     category: 'delivery',
     basePrice: 4.00,
     pricePerKm: 1.50

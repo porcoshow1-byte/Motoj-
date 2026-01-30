@@ -13,7 +13,7 @@ export interface Coords {
   lng: number;
 }
 
-export type PaymentMethod = 'pix' | 'cash' | 'corporate';
+export type PaymentMethod = 'pix' | 'cash' | 'corporate' | 'card' | 'credit_machine' | 'debit_machine' | 'picpay' | 'whatsapp';
 
 export interface Company {
   id: string;
@@ -57,6 +57,15 @@ export interface User {
   phone: string;
   cpf?: string; // Added for registration
   address?: string; // Added for registration
+  addressComponents?: {
+    street: string;
+    number: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    cep: string;
+    complement?: string;
+  };
   email?: string;
   rating: number;
   totalRides: number;
@@ -66,7 +75,28 @@ export interface User {
   type: 'passenger';
   isBlocked?: boolean;
   walletBalance?: number;
+  walletHistory?: WalletTransaction[];
+  coupons?: Coupon[];
+  referralCode?: string; // Indique e Ganhe
+  favoriteDrivers?: string[]; // IDs of favorite drivers
   companyId?: string; // Added for Corporate Module
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description: string;
+  discount: number;
+  type: 'percent' | 'fixed';
+  expiresAt?: number;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  date: number; // timestamp
+  description: string;
 }
 
 export interface Driver {
@@ -80,12 +110,13 @@ export interface Driver {
   status: 'online' | 'offline' | 'busy';
   earningsToday: number;
   phone: string;
-  verificationStatus?: 'pending' | 'approved' | 'rejected';
+  verificationStatus?: 'pending' | 'approved' | 'rejected' | 'verified';
   totalRides?: number;
   email?: string;
   cpf?: string; // Added for registration uniqueness check
   cnhUrl?: string;
   rejectionReason?: string;
+  createdAt?: number;
 }
 
 export interface RideRequest {
@@ -94,6 +125,7 @@ export interface RideRequest {
   destination: string;
   originCoords?: Coords;
   destinationCoords?: Coords;
+  routePolyline?: string;
   price: number;
   distance: string;
   duration: string;
@@ -103,6 +135,10 @@ export interface RideRequest {
   passenger: User;
   driver?: Driver;
   createdAt: number;
+  acceptedAt?: number;
+  startedAt?: number;
+  completedAt?: number;
+  cancelledAt?: number;
 
   // Payment Details
   paymentMethod?: PaymentMethod;

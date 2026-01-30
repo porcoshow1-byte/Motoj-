@@ -108,7 +108,8 @@ export const createRideRequest = async (
   deliveryDetails?: RideRequest['deliveryDetails'],
   securityCode?: string,
   paymentMethod: PaymentMethod = 'pix',
-  companyId?: string
+  companyId?: string,
+  routePolyline?: string
 ): Promise<string> => {
 
   if (isMockMode || !db) {
@@ -131,7 +132,8 @@ export const createRideRequest = async (
       securityCode,
       companyId,
       paymentMethod,
-      paymentStatus: paymentMethod === 'corporate' ? 'pending_invoice' : 'pending'
+      paymentStatus: paymentMethod === 'corporate' ? 'pending_invoice' : 'pending',
+      routePolyline
     };
     const rides = getMockRides();
     rides.push(newRide);
@@ -158,7 +160,8 @@ export const createRideRequest = async (
       ...(companyId && { companyId }),
       paymentStatus: paymentMethod === 'corporate' ? 'pending_invoice' : 'pending',
       ...(deliveryDetails && { deliveryDetails }),
-      ...(securityCode && { securityCode })
+      ...(securityCode && { securityCode }),
+      ...(routePolyline && { routePolyline })
     });
     triggerN8NWebhook('ride_requested', { id: docRef.id, passenger, origin, destination, price });
     return docRef.id;
